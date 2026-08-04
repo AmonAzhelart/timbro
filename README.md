@@ -114,6 +114,21 @@ Il token Hugging Face è salvato con permessi `600` e non viene mai restituito i
 
 Il salvataggio è bloccato mentre un job è in corso, per non cambiare i modelli sotto i piedi al worker.
 
+### Configurazione consigliata per 24 GB (RTX 4090)
+
+| | Valore | VRAM |
+|---|---|---|
+| Modello Whisper | `large-v3` | ~10 GB |
+| Precisione | `float16` | |
+| Batch size | `24` | |
+| Ampiezza di ricerca | `8` | |
+| Modello LLM | `gemma3:27b` o `qwen3:32b` | 17-19 GB |
+| `OLLAMA_KEEP_ALIVE` | `0` se l'LLM supera i 16 GB | |
+
+Whisper e Ollama non devono coesistere: la pipeline libera la VRAM prima di passare all'LLM. Ma con `OLLAMA_KEEP_ALIVE=5m`, su job consecutivi il modello linguistico è ancora in memoria quando Whisper riparte. Con un LLM da 19 GB su 24 disponibili questo basta a mandare in out-of-memory il job successivo: metti `0` e paghi ~10 secondi di ricaricamento per verbale.
+
+Con 24 GB puoi anche attivare la **separazione delle voci** senza scendere a compromessi: gira dopo la diarizzazione, quando Whisper è già stato scaricato.
+
 ### Modello di trascrizione
 
 | Modello | VRAM | Velocità | Qualità |

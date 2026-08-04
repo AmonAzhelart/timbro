@@ -8,9 +8,11 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     environment:
-      # Scarica il modello dalla VRAM dopo 5 minuti di inattività,
-      # così WhisperX ha la GPU libera per il job successivo.
-      OLLAMA_KEEP_ALIVE: "5m"
+      # Quanto il modello resta in VRAM dopo l'uso. Con 8-12 GB e un LLM
+      # capiente conviene "0": libera la scheda subito, così Whisper non se
+      # la trova occupata al job successivo. Con 24 GB, "5m" evita di
+      # ricaricarlo ogni volta.
+      OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
       OLLAMA_MAX_LOADED_MODELS: "1"
     ports:
       - "11434:11434"

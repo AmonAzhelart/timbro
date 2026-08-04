@@ -51,6 +51,18 @@ SUGGESTED_LLMS: list[dict[str, Any]] = [
         "vram_gb": 15,
         "note": "Sintesi molto curate, richiede GPU capiente.",
     },
+    {
+        "name": "gemma3:27b",
+        "label": "Gemma 3 · 27B",
+        "vram_gb": 17,
+        "note": "Da 24 GB in su. Ottimo italiano, verbali molto solidi.",
+    },
+    {
+        "name": "qwen3:32b",
+        "label": "Qwen 3 · 32B",
+        "vram_gb": 19,
+        "note": "Il massimo che entra in 24 GB. Metti OLLAMA_KEEP_ALIVE=0.",
+    },
 ]
 
 
