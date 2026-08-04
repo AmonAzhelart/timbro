@@ -83,6 +83,11 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen3:8b"
     ollama_num_ctx: int = 32768
     ollama_timeout_s: int = 900
+    #: Quanto il modello resta in VRAM dopo la risposta. Viaggia nella singola
+    #: richiesta, non come variabile d'ambiente del container: così è
+    #: modificabile a caldo senza riavviare Ollama.
+    #: "0" = scarica subito · "5m" = cinque minuti · "-1" = sempre in memoria.
+    ollama_keep_alive: str = "5m"
     chunk_chars: int = 12000
 
     # --- App ---

@@ -91,6 +91,10 @@ def _chat(
         ],
         "stream": False,
         "think": False,  # disattiva il reasoning verboso sui modelli ibridi (qwen3, ...)
+        # Permanenza in VRAM decisa qui e non dall'ambiente del container:
+        # con un LLM da 18-20 GB su una scheda da 24 è la differenza fra un
+        # job successivo che parte e uno che va in out-of-memory.
+        "keep_alive": settings.ollama_keep_alive,
         "options": {
             "temperature": temperature,
             "num_ctx": settings.ollama_num_ctx,

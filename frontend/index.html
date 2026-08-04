@@ -763,13 +763,31 @@ fieldset legend{font-size:11px;text-transform:uppercase;letter-spacing:.11em;
         </div>
         <div class="two">
           <div class="field">
-            <label for="s_url">Indirizzo di Ollama</label>
-            <input type="text" id="s_url">
+            <label for="s_keep">Permanenza in VRAM dopo l'uso</label>
+            <select id="s_keep">
+              <option value="0">Scarica subito · consigliato sopra i 16 GB</option>
+              <option value="5m">5 minuti · predefinito</option>
+              <option value="30m">30 minuti</option>
+              <option value="-1">Sempre in memoria</option>
+            </select>
+            <div class="desc">
+              La pipeline libera la VRAM prima di passare all'LLM, ma non il
+              contrario: su job consecutivi il modello linguistico è ancora
+              caricato quando Whisper riparte. Con un LLM da <b>18-20 GB</b> su
+              una scheda da 24 questo basta a mandare in out-of-memory il job
+              dopo. Scaricandolo subito paghi ~10 secondi per verbale.
+            </div>
           </div>
           <div class="field">
-            <label for="s_timeout">Timeout (secondi)</label>
+            <label for="s_timeout">Timeout richiesta (secondi)</label>
             <input type="number" id="s_timeout" min="30" max="7200" step="30">
+            <div class="desc">Alzalo per riunioni lunghe su hardware lento.</div>
           </div>
+        </div>
+        <div class="field">
+          <label for="s_url">Indirizzo di Ollama</label>
+          <input type="text" id="s_url">
+          <div class="desc">Cambialo solo se Ollama gira fuori da Docker.</div>
         </div>
       </fieldset>
 
@@ -1584,6 +1602,7 @@ const S = {
   beam:'#s_beam', nospeech:'#s_nospeech', vadon:'#s_vadon', vadoff:'#s_vadoff',
   multi:'#s_multi', prep:'#s_prep', autoctx:'#s_autoctx',
   llm:'#s_llm', ctx:'#s_ctx', chunk:'#s_chunk', url:'#s_url', timeout:'#s_timeout',
+  keep:'#s_keep',
   maxmb:'#s_maxmb', delaudio:'#s_delaudio', hf:'#s_hf', pull:'#s_pull',
 };
 const opt = (v,l,sel) => `<option value="${esc(v)}"${sel?' selected':''}>${esc(l)}</option>`;
@@ -1627,6 +1646,11 @@ function fillForm(){
   $(S.vadon).value = s.vad_onset;           $(S.vadoff).value = s.vad_offset;
   $(S.ctx).value = s.ollama_num_ctx;        $(S.chunk).value = s.chunk_chars;
   $(S.url).value = s.ollama_base_url;       $(S.timeout).value = s.ollama_timeout_s;
+  // Se il valore salvato non è fra quelli proposti, lo aggiungiamo alla tendina
+  // invece di sostituirlo in silenzio con un altro.
+  if(![...$(S.keep).options].some(o => o.value === s.ollama_keep_alive))
+    $(S.keep).insertAdjacentHTML('beforeend', opt(s.ollama_keep_alive, s.ollama_keep_alive, false));
+  $(S.keep).value = s.ollama_keep_alive;
   $(S.maxmb).value = s.max_upload_mb;
   $(S.multi).checked = s.multilingual;      $(S.prep).checked = s.audio_preprocess;
   $(S.autoctx).checked = s.auto_context;    $(S.delaudio).checked = s.delete_audio_after;
@@ -1786,6 +1810,7 @@ $('#btnSaveSettings').onclick = async () => {
     auto_context: $(S.autoctx).checked,
     ollama_model: $(S.llm).value, ollama_base_url: $(S.url).value.trim(),
     ollama_num_ctx: Number($(S.ctx).value), ollama_timeout_s: Number($(S.timeout).value),
+    ollama_keep_alive: $(S.keep).value,
     chunk_chars: Number($(S.chunk).value), max_upload_mb: Number($(S.maxmb).value),
     delete_audio_after: $(S.delaudio).checked,
   };

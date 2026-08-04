@@ -58,10 +58,24 @@ SUGGESTED_LLMS: list[dict[str, Any]] = [
         "note": "Da 24 GB in su. Ottimo italiano, verbali molto solidi.",
     },
     {
+        "name": "gemma4:26b",
+        "label": "Gemma 4 · 26B (MoE)",
+        "vram_gb": 18,
+        "note": "Consigliato su 24 GB: solo 4B attivi, quindi veloce come un modello "
+                "molto più piccolo. Richiede Ollama 0.22+.",
+    },
+    {
+        "name": "gemma4:31b",
+        "label": "Gemma 4 · 31B (denso)",
+        "vram_gb": 20,
+        "note": "Qualità massima entro 24 GB, ma denso: più lento del 26B. "
+                "Metti la permanenza in VRAM a zero.",
+    },
+    {
         "name": "qwen3:32b",
         "label": "Qwen 3 · 32B",
         "vram_gb": 19,
-        "note": "Il massimo che entra in 24 GB. Metti OLLAMA_KEEP_ALIVE=0.",
+        "note": "Il tetto per 24 GB. Metti la permanenza in VRAM a zero.",
     },
 ]
 

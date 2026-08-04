@@ -223,6 +223,7 @@ class AppSettings(BaseModel):
     ollama_model: str
     ollama_num_ctx: int
     ollama_timeout_s: int
+    ollama_keep_alive: str = "5m"
     chunk_chars: int
 
     max_upload_mb: int
@@ -260,6 +261,7 @@ class SettingsPatch(BaseModel):
     ollama_model: str | None = None
     ollama_num_ctx: int | None = Field(default=None, ge=2048, le=262144)
     ollama_timeout_s: int | None = Field(default=None, ge=30, le=7200)
+    ollama_keep_alive: str | None = Field(default=None, max_length=16)
     chunk_chars: int | None = Field(default=None, ge=2000, le=400000)
 
     max_upload_mb: int | None = Field(default=None, ge=1, le=20480)

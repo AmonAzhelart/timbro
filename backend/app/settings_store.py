@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,7 @@ EDITABLE: tuple[str, ...] = (
     "ollama_model",
     "ollama_num_ctx",
     "ollama_timeout_s",
+    "ollama_keep_alive",
     "chunk_chars",
     "max_upload_mb",
     "delete_audio_after",
@@ -164,6 +166,7 @@ def current() -> AppSettings:
             ollama_model=settings.ollama_model,
             ollama_num_ctx=settings.ollama_num_ctx,
             ollama_timeout_s=settings.ollama_timeout_s,
+            ollama_keep_alive=settings.ollama_keep_alive,
             chunk_chars=settings.chunk_chars,
             max_upload_mb=settings.max_upload_mb,
             delete_audio_after=settings.delete_audio_after,
@@ -265,6 +268,15 @@ def _validate(patch: dict[str, Any]) -> None:
     url = patch.get("ollama_base_url")
     if url and not str(url).startswith(("http://", "https://")):
         raise ValueError("L'indirizzo di Ollama deve iniziare con http:// o https://")
+
+    keep = patch.get("ollama_keep_alive")
+    if keep is not None and str(keep).strip():
+        # Ollama accetta un numero di secondi oppure una durata tipo "5m"/"1h".
+        if not re.fullmatch(r"-?\d+[smh]?", str(keep).strip()):
+            raise ValueError(
+                "Permanenza in VRAM non valida: usa un numero di secondi "
+                "(0, 300) oppure una durata (30s, 5m, 1h). -1 = sempre in memoria."
+            )
 
     token = patch.get("hf_token")
     if token and not str(token).startswith("hf_"):

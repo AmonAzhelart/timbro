@@ -162,6 +162,56 @@ def check_imports() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 3-bis. Moduli usati ma non importati
+# ---------------------------------------------------------------------------
+#: Moduli di libreria standard usati nel progetto. Se compaiono come
+#: `nome.qualcosa` senza il relativo import, è un NameError che scatta solo
+#: quando quella riga viene eseguita — cioè, tipicamente, in produzione.
+STDLIB = {
+    "re", "os", "json", "logging", "threading", "subprocess", "shutil",
+    "tempfile", "inspect", "gc", "uuid", "queue", "sqlite3", "difflib",
+    "datetime", "pathlib", "math", "time", "itertools", "collections",
+}
+
+
+def check_undefined_modules() -> None:
+    global checks_run
+    for mod, tree in MODULES.items():
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported.add(alias.asname or alias.name.split(".")[0])
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    imported.add(alias.asname or alias.name)
+
+        # Nomi locali che potrebbero mascherare un modulo (parametri, variabili)
+        shadowed = {
+            n.id for n in ast.walk(tree)
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+        } | {
+            a.arg for f in ast.walk(tree)
+            if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+            for a in f.args.args + f.args.kwonlyargs
+        }
+
+        seen: set[str] = set()
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)):
+                continue
+            name = node.value.id
+            if name not in STDLIB or name in imported or name in shadowed:
+                continue
+            if (mod, name) in seen:
+                continue
+            seen.add((mod, name))
+            checks_run += 1
+            fail(f"app/{mod}.py", node.lineno,
+                 f"usa '{name}.{node.attr}' ma '{name}' non è importato")
+
+
+# ---------------------------------------------------------------------------
 # 4. Modelli Pydantic
 # ---------------------------------------------------------------------------
 RESERVED = {
@@ -250,8 +300,8 @@ def check_frontend() -> None:
 
 # ---------------------------------------------------------------------------
 def main() -> int:
-    for check in (check_imports, check_cross_module, check_routes,
-                  check_pydantic, check_frontend):
+    for check in (check_imports, check_cross_module, check_undefined_modules,
+                  check_routes, check_pydantic, check_frontend):
         check()
 
     if problems:
