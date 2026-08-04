@@ -1,0 +1,18 @@
+# --- Web layer ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# --- ASR / diarizzazione ---
+# WhisperX porta con sé faster-whisper, ctranslate2, pyannote.audio e torchaudio.
+whisperx==3.8.6
+
+# --- HTTP client verso Ollama ---
+httpx==0.28.1
+
+# --- Lettura VRAM dal driver NVIDIA ---
+# Necessario perché CUDA, dentro un container, non vede le allocazioni
+# fatte dal container di Ollama sulla stessa scheda.
+nvidia-ml-py==12.560.30

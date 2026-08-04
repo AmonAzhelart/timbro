@@ -1,0 +1,119 @@
+name: timbro
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: timbro-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      # Scarica il modello dalla VRAM dopo 5 minuti di inattività,
+      # così WhisperX ha la GPU libera per il job successivo.
+      OLLAMA_KEEP_ALIVE: "5m"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # Job monouso: scarica il modello LLM al primo avvio, poi esce.
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: timbro-ollama-pull
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "ollama pull ${OLLAMA_MODEL:-qwen3:8b} && echo 'Modello pronto.'"
+    restart: "no"
+
+  # Separazione delle voci sovrapposte. Opzionale: parte solo con
+  #   docker compose --profile separation up -d
+  # Vive a parte perché richiede pyannote 3.3.x, incompatibile con la 4.x
+  # di WhisperX. Se è spento, l'api se ne accorge e prosegue senza.
+  separator:
+    build:
+      context: ./separator
+      dockerfile: Dockerfile
+    container_name: timbro-separator
+    profiles: ["separation"]
+    restart: unless-stopped
+    environment:
+      DATA_DIR: "/data"
+      HF_TOKEN: "${HF_TOKEN:-}"
+      HF_HOME: "/cache/huggingface"
+      SEPARATION_MODEL: "${SEPARATION_MODEL:-pyannote/speech-separation-ami-1.0}"
+    volumes:
+      - ./data:/data
+      - hf-cache:/cache/huggingface
+      - torch-cache:/cache/torch
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: timbro-api
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      SEPARATOR_URL: "http://separator:8000"
+      DATA_DIR: "/data"
+      HF_HOME: "/cache/huggingface"
+      TORCH_HOME: "/cache/torch"
+    volumes:
+      - ./data:/data                 # audio caricati + risultati (visibili dall'host)
+      - hf-cache:/cache/huggingface  # modelli Whisper/pyannote: scaricati una volta sola
+      - torch-cache:/cache/torch
+    ports:
+      - "${API_PORT:-8080}:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/api/health')\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  ollama-models:
+  hf-cache:
+  torch-cache:

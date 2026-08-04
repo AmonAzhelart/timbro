@@ -1,0 +1,48 @@
+# ============================================================================
+# Ambiente PINNATO per la separazione delle voci.
+#
+# Il pipeline speech-separation-ami-1.0 richiede pyannote.audio 3.3.x, mentre
+# WhisperX 3.8.6 richiede la 4.x: è il motivo per cui questo servizio vive in
+# un container separato.
+#
+# I limiti superiori qui sotto NON sono pignoleria. pyannote.audio 3.3.2 è di
+# fine 2024 e dichiara solo vincoli `>=`: senza tetti, pip risolve alle
+# versioni odierne, che sono avanti di anni e hanno rotto le API che 3.3.2
+# usa. Il caso più grave è huggingface_hub: la serie 1.x ha rimosso
+# `use_auth_token`, che è esattamente il parametro con cui questo pipeline
+# carica il modello. Il risultato sarebbe un container che builda e poi
+# esplode al primo caricamento.
+# ============================================================================
+
+pyannote.audio[separation]==3.3.2
+
+# --- Dipendenze pyannote: la serie 6.x/4.x ha cambiato API ---
+pyannote.core>=5.0,<6
+pyannote.database>=5.0.1,<6
+pyannote.metrics>=3.2,<4
+pyannote.pipeline>=3.0.1,<4
+
+# --- huggingface_hub: la 1.x rompe `use_auth_token` ---
+huggingface_hub>=0.23,<0.27
+
+# --- transformers 5.x ha riscritto parecchio ---
+transformers>=4.39.1,<5
+
+# --- lightning / speechbrain contemporanei a pyannote 3.3.2 ---
+# `lightning` lo tira pyannote, `pytorch-lightning` lo tira asteroid:
+# vanno tenuti entrambi sulla stessa generazione.
+lightning>=2.0.1,<2.5
+pytorch-lightning>=2.0,<2.5
+speechbrain>=1.0,<1.1
+
+# --- pandas 3.x ha rimosso API usate da asteroid ---
+pandas>=2.0,<3
+
+# --- numpy: allineato alla versione dell'immagine base (2.1.2) ---
+numpy>=2.0,<2.3
+
+# --- Servizio HTTP ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+scipy==1.14.1
