@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 
-from . import prompts
+from . import overlap, prompts
 from .config import settings
 from .models import MeetingAnalysis, Segment
 
@@ -245,19 +245,41 @@ def _extract_json(raw: str) -> Any:
 # Formattazione della trascrizione
 # ---------------------------------------------------------------------------
 def format_transcript(segments: list[Segment], speaker_names: dict[str, str] | None = None) -> str:
+    """Rende la trascrizione nella forma che legge l'LLM.
+
+    I tratti sovrapposti sono marcati: il modello deve sapere che lì
+    l'attribuzione è incerta, altrimenti assegna decisioni alla persona
+    sbagliata con la stessa sicurezza del resto. Le copie prodotte dalla
+    duplicazione vengono però unite in una riga sola: ripetere la stessa
+    frase tre volte consuma contesto e suggerisce al modello un'insistenza
+    che nella riunione non c'era.
+    """
     names = speaker_names or {}
     lines = []
-    for seg in segments:
-        speaker = names.get(seg.speaker, seg.speaker)
-        # I tratti sovrapposti sono marcati: il modello deve sapere che lì
-        # l'attribuzione è incerta, altrimenti assegna decisioni alla persona
-        # sbagliata con la stessa sicurezza del resto.
-        if seg.overlap and not seg.separated:
-            others = [names.get(s, s) for s in seg.overlap if s != seg.speaker]
-            marker = f" [PARLATO SOVRAPPOSTO con {', '.join(others)}]" if others else " [PARLATO SOVRAPPOSTO]"
+
+    for group in overlap.group_for_reading(segments):
+        stamp = _hhmmss(group["start"])
+
+        if not group["overlapping"]:
+            speaker = names.get(group["speakers"][0], group["speakers"][0])
+            text = group["texts"][0][1] if group["texts"] else ""
+            lines.append(f"[{stamp}] {speaker}: {text}")
+            continue
+
+        who = ", ".join(names.get(s, s) for s in group["speakers"])
+
+        if group["separated"] and len(group["texts"]) > 1:
+            # Tracce separate: ogni voce ha un testo suo, l'attribuzione è buona.
+            for speaker, text in group["texts"]:
+                display = names.get(speaker, speaker)
+                lines.append(
+                    f"[{stamp}] {display} [PARLANO INSIEME con {who}, "
+                    f"tracce separate]: {text}"
+                )
         else:
-            marker = ""
-        lines.append(f"[{_hhmmss(seg.start)}] {speaker}{marker}: {seg.text}")
+            text = group["texts"][0][1] if group["texts"] else ""
+            lines.append(f"[{stamp}] [PARLATO SOVRAPPOSTO fra {who}]: {text}")
+
     return "\n".join(lines)
 
 
@@ -266,9 +288,10 @@ def _overlap_note(segments: list[Segment]) -> str:
     if not any(seg.overlap and not seg.separated for seg in segments):
         return ""
     return (
-        "\n\nATTENZIONE: alcune righe sono marcate [PARLATO SOVRAPPOSTO]. In quei "
-        "punti più persone parlavano insieme e il sistema non può stabilire con "
-        "certezza chi abbia detto cosa. Regole per quelle righe:\n"
+        "\n\nATTENZIONE: alcune righe sono marcate [PARLATO SOVRAPPOSTO fra ...]. "
+        "In quei punti più persone parlavano insieme, la riga non ha un singolo "
+        "parlante e il sistema non può stabilire chi abbia detto cosa. Regole "
+        "per quelle righe:\n"
         "- NON attribuire a nessuno decisioni, impegni o action point che "
         "compaiono solo lì.\n"
         "- Se il contenuto è comunque rilevante, riportalo senza responsabile "
@@ -328,6 +351,71 @@ def _parse_analysis(raw: str) -> MeetingAnalysis:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+def _reduce_budget_chars() -> int:
+    """Quanti caratteri di appunti possiamo passare alla fase REDUCE.
+
+    Gli appunti della fase MAP sono volutamente dettagliati: su una riunione di
+    due ore possono superare il contesto del modello. Se ciò accade Ollama
+    tronca dall'inizio senza dirlo, e il verbale perde silenziosamente pezzi
+    della riunione. Stimiamo il budget e, se serve, consolidiamo a gruppi.
+
+    Circa 3 caratteri per token in italiano; lasciamo ~45% del contesto al
+    prompt di sistema e alla risposta, che qui è lunga.
+    """
+    return max(4000, int(settings.ollama_num_ctx * 3 * 0.55))
+
+
+def _fold_notes(notes: list[str], note: str, progress: ProgressFn) -> str:
+    """Riduce gli appunti a un blocco che entra nel contesto, fondendo a gruppi."""
+    labelled = [f"### Appunti porzione {i}\n{n}" for i, n in enumerate(notes, 1)]
+    budget = _reduce_budget_chars()
+    joined = "\n\n".join(labelled)
+    round_no = 0
+
+    while len(joined) > budget and len(labelled) > 1:
+        round_no += 1
+        progress("summarizing", 90, f"Consolidamento appunti (passata {round_no})")
+
+        groups: list[list[str]] = []
+        current: list[str] = []
+        size = 0
+        for block in labelled:
+            # Il gruppo deve entrare nel contesto da solo: stesso budget.
+            if current and size + len(block) > budget:
+                groups.append(current)
+                current, size = [], 0
+            current.append(block)
+            size += len(block) + 2
+        if current:
+            groups.append(current)
+
+        # Nessun raggruppamento possibile: ogni blocco è già oltre il budget da
+        # solo. Un'altra passata non ridurrebbe nulla: si esce e si tronca.
+        if len(groups) == len(labelled):
+            break
+
+        labelled = [
+            _chat(prompts.FOLD.format(content="\n\n".join(g)) + note, temperature=0.1)
+            if len(g) > 1
+            else g[0]
+            for g in groups
+        ]
+        joined = "\n\n".join(labelled)
+
+    # Meglio troncare qui, lasciandone traccia nei log, che farlo fare a Ollama
+    # in silenzio: così almeno si sa perché il verbale è incompleto.
+    if len(joined) > budget:
+        log.warning(
+            "Appunti troppo voluminosi per il contesto (%d caratteri, budget %d): "
+            "verranno troncati. Aumenta OLLAMA_NUM_CTX o riduci CHUNK_CHARS.",
+            len(joined),
+            budget,
+        )
+        return joined[:budget]
+
+    return joined
+
+
 def analyze(
     segments: list[Segment],
     progress: ProgressFn,
@@ -351,7 +439,7 @@ def analyze(
     # Riunione lunga: fase MAP
     notes: list[str] = []
     for i, chunk in enumerate(chunks, start=1):
-        pct = 75 + int(15 * (i - 1) / len(chunks))
+        pct = 75 + int(13 * (i - 1) / len(chunks))
         progress("summarizing", pct, f"Analisi blocco {i} di {len(chunks)}")
         notes.append(
             _chat(
@@ -361,8 +449,8 @@ def analyze(
         )
 
     # Fase REDUCE
+    joined = _fold_notes(notes, note, progress)
     progress("summarizing", 92, "Composizione del verbale finale")
-    joined = "\n\n".join(f"### Appunti porzione {i}\n{n}" for i, n in enumerate(notes, 1))
     raw = _chat(
         prompts.REDUCE.format(
             source_desc="gli appunti estratti dalle diverse porzioni", content=joined

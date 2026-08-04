@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,6 +32,7 @@ from .models import (
     JobOptions,
     JobStatus,
     JobSummary,
+    MeetingAnalysis,
     PullRequest,
     RenameRequest,
     RetranscribeRequest,
@@ -464,6 +466,26 @@ def rename_speakers(job_id: str, payload: RenameRequest) -> JobDetail:
     return updated
 
 
+@app.patch("/api/jobs/{job_id}/analysis", response_model=JobDetail)
+def edit_analysis(job_id: str, payload: MeetingAnalysis) -> JobDetail:
+    """Sostituisce il verbale con la versione corretta a mano.
+
+    Non rigenera nulla e non tocca la trascrizione: l'LLM sbaglia un nome o una
+    scadenza e finora l'unico rimedio era rifare tutto, perdendo anche le
+    correzioni giuste. Qui vince quello che scrive la persona.
+    """
+    job = store.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, "Job non trovato")
+    if job.status not in (JobStatus.DONE, JobStatus.ERROR, JobStatus.CANCELLED):
+        raise HTTPException(409, "Job ancora in elaborazione")
+
+    store.update_job(job_id, analysis=payload.model_dump())
+    updated = store.get_job(job_id)
+    assert updated is not None
+    return updated
+
+
 # ---------------------------------------------------------------------------
 # Export
 # ---------------------------------------------------------------------------
@@ -482,12 +504,47 @@ def markdown(job_id: str, transcript: bool = True, download: bool = False):
     return PlainTextResponse(content, media_type="text/markdown; charset=utf-8", headers=headers)
 
 
+#: Il tipo MIME va dichiarato esplicitamente: senza, Starlette lo indovina
+#: dall'estensione e su un fallimento ripiega su text/plain, che il tag
+#: <audio> rifiuta di riprodurre. Le chiavi non coperte da `mimetypes`
+#: (o coperte male, come .m4a) stanno qui.
+_AUDIO_TYPES = {
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".wav": "audio/wav",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".opus": "audio/opus",
+    ".webm": "video/webm",
+    ".mp4": "video/mp4",
+    ".m4v": "video/mp4",
+    ".mov": "video/quicktime",
+    ".mkv": "video/x-matroska",
+    ".avi": "video/x-msvideo",
+}
+
+
 @app.get("/api/jobs/{job_id}/audio")
 def audio(job_id: str):
+    """Serve l'audio originale del job, per la riproduzione sincronizzata.
+
+    `FileResponse` gestisce da sé le richieste Range, indispensabili perché il
+    player possa saltare a un istante preciso senza scaricare tutto il file.
+    """
     path = store.get_audio_path(job_id)
     if not path or not Path(path).exists():
         raise HTTPException(404, "Audio non disponibile")
-    return FileResponse(path)
+
+    suffix = Path(path).suffix.lower()
+    media_type = _AUDIO_TYPES.get(suffix) or mimetypes.guess_type(path)[0] or "application/octet-stream"
+    return FileResponse(
+        path,
+        media_type=media_type,
+        # Il file non cambia mai: evita di riscaricarlo a ogni apertura del job.
+        headers={"Cache-Control": "private, max-age=86400", "Accept-Ranges": "bytes"},
+    )
 
 
 # ---------------------------------------------------------------------------

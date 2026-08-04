@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from . import overlap
 from .models import JobDetail
 from .summarize import _hhmmss
 
@@ -78,15 +79,39 @@ def to_markdown(job: JobDetail, include_transcript: bool = True) -> str:
     if include_transcript and job.segments:
         lines += ["---", "", "## Trascrizione integrale", ""]
         current_speaker = None
-        for seg in job.segments:
-            speaker = names.get(seg.speaker, seg.speaker)
-            overlapping = len(seg.overlap) > 1 and not seg.separated
-            if speaker != current_speaker:
-                lines.append("")
-                mark = " ⚠" if overlapping else ""
-                lines.append(f"**{speaker}**{mark} _[{_hhmmss(seg.start)}]_")
-                current_speaker = speaker
-            lines.append(seg.text)
+
+        # Le sovrapposizioni non separate arrivano qui come copie dello stesso
+        # testo, una per voce: stampate così sembrano una frase ripetuta tre
+        # volte. `group_for_reading` le ricuce in un evento unico.
+        for group in overlap.group_for_reading(job.segments):
+            stamp = _hhmmss(group["start"])
+
+            if not group["overlapping"]:
+                speaker = names.get(group["speakers"][0], group["speakers"][0])
+                if speaker != current_speaker:
+                    lines += ["", f"**{speaker}** _[{stamp}]_"]
+                    current_speaker = speaker
+                lines.append(group["texts"][0][1] if group["texts"] else "")
+                continue
+
+            who = " + ".join(names.get(s, s) for s in group["speakers"])
+            current_speaker = None  # dopo un blocco l'intestazione va ripetuta
+
+            if group["separated"] and len(group["texts"]) > 1:
+                lines += ["", f"**{who}** _[{stamp}]_ — voci separate", ""]
+                for speaker, text in group["texts"]:
+                    lines.append(f"- **{names.get(speaker, speaker)}:** {text}")
+            else:
+                text = group["texts"][0][1] if group["texts"] else ""
+                lines += [
+                    "",
+                    f"**{who}** _[{stamp}]_ — ⚠ parlano insieme",
+                    "",
+                    f"> {text}",
+                    "",
+                    "> _Whisper trascrive un solo flusso audio: questa è la frase "
+                    "che ha distinto, non attribuibile con certezza a una delle voci._",
+                ]
         lines.append("")
 
     return "\n".join(lines)

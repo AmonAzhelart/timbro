@@ -172,6 +172,97 @@ def _speakers_at(overlaps: list[dict[str, Any]], start: float, end: float) -> li
     return sorted(found)
 
 
+def group_for_reading(segments: list[Any]) -> list[dict[str, Any]]:
+    """Raggruppa i segmenti in eventi leggibili, ricucendo le duplicazioni.
+
+    `annotate(duplicate=True)` emette lo stesso testo una volta per voce
+    presente. È corretto come dato — dice chi c'era — ma illeggibile come
+    testo: la stessa frase compare tre volte di fila attribuita a tre persone
+    diverse, e chi legge pensa che la trascrizione sia rotta.
+
+    Qui quelle copie tornano a essere un evento solo. Ogni gruppo è
+    ``{"start", "end", "speakers", "texts", "overlapping", "separated"}``:
+
+    * ``overlapping=False`` → intervento normale, una voce e un testo;
+    * ``overlapping=True`` con un solo testo → più voci insieme, tracce non
+      separate: il testo è l'unico flusso che Whisper ha distinto e non va
+      attribuito a nessuno in particolare;
+    * ``overlapping=True`` con più testi → tracce separate, ogni voce ha
+      davvero detto una cosa diversa.
+
+    Accetta sia i `Segment` del modello sia i dizionari grezzi, perché serve
+    sia all'esportazione sia alla costruzione del prompt.
+    """
+    def get(seg: Any, key: str, default: Any) -> Any:
+        value = seg.get(key, default) if isinstance(seg, dict) else getattr(seg, key, default)
+        return default if value is None else value
+
+    groups: list[dict[str, Any]] = []
+    index = 0
+    while index < len(segments):
+        seg = segments[index]
+        active = get(seg, "overlap", [])
+
+        if len(active) < 2:
+            groups.append(
+                {
+                    "start": get(seg, "start", 0.0),
+                    "end": get(seg, "end", 0.0),
+                    "speakers": [get(seg, "speaker", "?")],
+                    "texts": [(get(seg, "speaker", "?"), get(seg, "text", ""))],
+                    "overlapping": False,
+                    "separated": False,
+                }
+            )
+            index += 1
+            continue
+
+        # Consecutivi e temporalmente intrecciati: sono lo stesso evento.
+        members = [seg]
+        end = get(seg, "end", 0.0)
+        index += 1
+        while index < len(segments):
+            nxt = segments[index]
+            if len(get(nxt, "overlap", [])) < 2 or get(nxt, "start", 0.0) >= end:
+                break
+            end = max(end, get(nxt, "end", 0.0))
+            members.append(nxt)
+            index += 1
+
+        # Il dominante per primo: è la voce di cui il testo è più attendibile.
+        speakers: list[str] = []
+        primary = None
+        for member in members:
+            who = get(member, "speaker", "?")
+            if who not in speakers:
+                speakers.append(who)
+            if primary is None and get(member, "overlap_primary", True):
+                primary = who
+        if primary and primary in speakers:
+            speakers = [primary] + [s for s in speakers if s != primary]
+
+        seen: set[str] = set()
+        texts: list[tuple[str, str]] = []
+        for member in members:
+            text = (get(member, "text", "") or "").strip()
+            if text and text not in seen:
+                seen.add(text)
+                texts.append((get(member, "speaker", "?"), text))
+
+        groups.append(
+            {
+                "start": get(members[0], "start", 0.0),
+                "end": end,
+                "speakers": speakers,
+                "texts": texts,
+                "overlapping": True,
+                "separated": any(get(m, "separated", False) for m in members),
+            }
+        )
+
+    return groups
+
+
 def annotate(
     segments: list[dict[str, Any]],
     overlaps: list[dict[str, Any]],

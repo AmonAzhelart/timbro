@@ -46,6 +46,12 @@ class Segment(BaseModel):
     #: True se questo testo proviene da una traccia audio separata, quindi
     #: appartiene davvero a questa voce e non al parlante dominante.
     separated: bool = False
+    #: Su un tratto sovrapposto non separato lo stesso testo viene emesso una
+    #: volta per voce presente: senza questo flag l'interfaccia non distingue
+    #: l'originale dai duplicati e mostra la stessa frase tre volte di fila,
+    #: attribuita a tre persone diverse. True = è la copia del parlante
+    #: dominante, quella di cui il testo è più probabilmente fedele.
+    overlap_primary: bool = True
 
 
 class OverlapStats(BaseModel):
