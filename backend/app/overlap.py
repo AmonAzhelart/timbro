@@ -34,7 +34,67 @@ MIN_OVERLAP_S = 0.4
 # ---------------------------------------------------------------------------
 # 1. Segmenti spezzati sul cambio di voce
 # ---------------------------------------------------------------------------
-def split_on_speaker_change(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _run_seconds(group: list[dict[str, Any]]) -> float:
+    starts = [w["start"] for w in group if w.get("start") is not None]
+    ends = [w["end"] for w in group if w.get("end") is not None]
+    return (max(ends) - min(starts)) if starts and ends else 0.0
+
+
+def _merge_short_runs(
+    groups: list[list[dict[str, Any]]],
+    min_words: int,
+    min_seconds: float,
+) -> list[list[dict[str, Any]]]:
+    """Riassorbe i cambi di voce troppo brevi per essere veri.
+
+    Le etichette di parola non sono un dato pulito: nelle pause, sui respiri e
+    sulle parole brevi a cavallo fra due turni la diarizzazione sbaglia
+    facilmente. Senza una soglia, una singola parola mal etichettata spezza la
+    frase e fa comparire un turno che non è mai esistito — una persona sola
+    sembra due che si interrompono a vicenda.
+
+    Vale lo stesso principio già applicato a `MIN_OVERLAP_S`: sotto una certa
+    durata non è un evento, è rumore di confine.
+
+    Un blocco sopravvive se è abbastanza lungo *in parole* oppure *nel tempo*:
+    così restano le interiezioni brevi ma nette ("esattamente") e cadono le
+    parole isolate.
+    """
+    if len(groups) < 2:
+        return groups
+
+    kept: list[list[dict[str, Any]]] = []
+    for group in groups:
+        solid = len(group) >= min_words or _run_seconds(group) >= min_seconds
+
+        if not solid and kept:
+            # Troppo breve: la parola torna a chi stava parlando.
+            for w in group:
+                w["speaker"] = kept[-1][0]["speaker"]
+            kept[-1].extend(group)
+            continue
+
+        # Un blocco breve in apertura non ha un "prima" a cui tornare: lo si
+        # tiene in sospeso e lo assorbe il primo blocco solido che arriva.
+        if not solid and not kept:
+            kept.append(group)
+            continue
+
+        if kept and kept[-1][0]["speaker"] == group[0]["speaker"]:
+            kept[-1].extend(group)
+        else:
+            kept.append(group)
+
+    # Se il primo blocco era breve e il secondo è di un'altra voce, il primo
+    # resta sospetto ma senza alternative: lo lasciamo com'è.
+    return kept
+
+
+def split_on_speaker_change(
+    segments: list[dict[str, Any]],
+    min_words: int = 2,
+    min_seconds: float = 0.5,
+) -> list[dict[str, Any]]:
     """Divide i segmenti dove le parole cambiano parlante.
 
     WhisperX etichetta ogni parola, ma il segmento riceve un solo speaker: il
@@ -42,9 +102,14 @@ def split_on_speaker_change(segments: list[dict[str, Any]]) -> list[dict[str, An
     scambio finisce attribuito a una sola persona. Qui usiamo le etichette di
     parola, che sono già disponibili e più precise.
 
-    I segmenti senza parole etichettate restano invariati.
+    `min_words` e `min_seconds` sono la soglia sotto la quale un cambio di
+    voce viene considerato rumore e riassorbito: vedi `_merge_short_runs`.
+
+    I segmenti senza parole etichettate restano invariati, ma ereditano la voce
+    dell'ultimo segmento etichettato invece di restare anonimi.
     """
     out: list[dict[str, Any]] = []
+    last_speaker: str | None = None
 
     for seg in segments:
         words = [w for w in (seg.get("words") or []) if (w.get("word") or "").strip()]
@@ -52,6 +117,11 @@ def split_on_speaker_change(segments: list[dict[str, Any]]) -> list[dict[str, An
 
         # Senza etichette di parola non c'è nulla da spezzare
         if not words or len(labelled) < 2:
+            # Con `fill_nearest` disattivato un segmento può non avere voce:
+            # attribuirlo a chi stava parlando è più utile che lasciarlo anonimo.
+            if not seg.get("speaker") and last_speaker:
+                seg["speaker"] = last_speaker
+            last_speaker = seg.get("speaker") or last_speaker
             out.append(seg)
             continue
 
@@ -70,6 +140,9 @@ def split_on_speaker_change(segments: list[dict[str, Any]]) -> list[dict[str, An
                 groups[-1].append(w)
             else:
                 groups.append([w])
+
+        groups = _merge_short_runs(groups, min_words, min_seconds)
+        last_speaker = groups[-1][0]["speaker"] if groups else last_speaker
 
         if len(groups) == 1:
             seg["speaker"] = groups[0][0]["speaker"]
@@ -170,6 +243,122 @@ def _speakers_at(overlaps: list[dict[str, Any]], start: float, end: float) -> li
             if shared >= min(MIN_OVERLAP_S, (end - start) * 0.5):
                 found.update(o["speakers"])
     return sorted(found)
+
+
+def split_at_boundaries(
+    segments: list[dict[str, Any]], overlaps: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Spezza i segmenti sui confini delle sovrapposizioni.
+
+    Whisper produce segmenti anche di venti o trenta secondi. Deciderne la
+    sorte in blocco — "questo tocca una sovrapposizione, quindi lo sostituisco
+    tutto" — significa buttare o duplicare decine di secondi di parlato per
+    colpa di mezzo secondo di accavallamento. Con i tempi di parola il taglio
+    si può fare nel punto giusto.
+
+    I segmenti senza tempi di parola restano interi: non c'è modo di tagliarli
+    onestamente, e inventare un punto sarebbe peggio.
+    """
+    bounds = sorted({t for o in overlaps for t in (o["start"], o["end"])})
+    if not bounds:
+        return segments
+
+    out: list[dict[str, Any]] = []
+    for seg in segments:
+        start, end = seg.get("start", 0.0), seg.get("end", 0.0)
+        words = [w for w in (seg.get("words") or []) if (w.get("word") or "").strip()]
+        cuts = [b for b in bounds if start < b < end]
+
+        if not cuts or not words:
+            out.append(seg)
+            continue
+
+        # Ogni parola finisce nella fascia delimitata dai confini di taglio.
+        groups: list[list[dict[str, Any]]] = []
+        current_band: int | None = None
+        for w in words:
+            # Si usa il punto CENTRALE della parola, non il suo inizio: una
+            # parola a cavallo del confine non si può tagliare, e assegnarla
+            # in base all'inizio la fa sconfinare per tutta la sua durata
+            # nella fascia sbagliata. Col centro l'errore residuo è al più
+            # mezza parola, e cade dalla parte in cui la parola sta di più.
+            ws, we = w.get("start"), w.get("end")
+            when = (ws + we) / 2 if ws is not None and we is not None else (ws or we)
+            if when is None:
+                # Parola senza tempo: resta con la precedente, non apre una fascia.
+                if groups:
+                    groups[-1].append(w)
+                    continue
+                when = start
+            band = sum(1 for b in cuts if when >= b)
+            if band != current_band:
+                groups.append([w])
+                current_band = band
+            else:
+                groups[-1].append(w)
+
+        if len(groups) < 2:
+            out.append(seg)
+            continue
+
+        for group in groups:
+            text = " ".join((w.get("word") or "").strip() for w in group).strip()
+            if not text:
+                continue
+            starts = [w["start"] for w in group if w.get("start") is not None]
+            ends = [w["end"] for w in group if w.get("end") is not None]
+            piece = dict(seg)
+            piece["start"] = min(starts) if starts else start
+            piece["end"] = max(ends) if ends else end
+            piece["text"] = text
+            piece["words"] = group
+            out.append(piece)
+
+    if len(out) != len(segments):
+        log.info(
+            "Segmenti tagliati sui confini delle sovrapposizioni: %s -> %s",
+            len(segments), len(out),
+        )
+    return out
+
+
+def merge_spans(spans: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Unisce intervalli che si toccano, per misurare una copertura."""
+    out: list[list[float]] = []
+    for start, end in sorted(spans):
+        if end <= start:
+            continue
+        if out and start <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], end)
+        else:
+            out.append([start, end])
+    return [(a, b) for a, b in out]
+
+
+def covered_seconds(spans: list[tuple[float, float]]) -> float:
+    return sum(b - a for a, b in merge_spans(spans))
+
+
+def fraction_inside(seg: dict[str, Any], spans: list[tuple[float, float]]) -> float:
+    """Quanta parte del segmento cade dentro gli intervalli dati, da 0 a 1.
+
+    Sostituisce il test sul punto centrale, che sbagliava clamorosamente sui
+    segmenti lunghi: le tracce separate non hanno i tempi di parola, quindi
+    restano interi anche di trenta secondi, e la probabilità che il loro
+    centro cada dentro una finestra di sovrapposizione da un secondo è quasi
+    nulla. Con il centro venivano scartati quasi tutti.
+    """
+    start, end = seg.get("start", 0.0), seg.get("end", 0.0)
+    if end <= start:
+        return 1.0 if any(a <= start < b for a, b in spans) else 0.0
+    inside = sum(
+        max(0.0, min(end, b) - max(start, a)) for a, b in spans
+    )
+    return min(1.0, inside / (end - start))
+
+
+def overlap_spans(overlaps: list[dict[str, Any]]) -> list[tuple[float, float]]:
+    return merge_spans([(o["start"], o["end"]) for o in overlaps])
 
 
 def group_for_reading(segments: list[Any]) -> list[dict[str, Any]]:

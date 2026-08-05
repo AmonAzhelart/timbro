@@ -13,12 +13,13 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime
 from collections.abc import Callable
 from typing import Any
 
 import httpx
 
-from . import overlap, prompts
+from . import dates, overlap, prompts
 from .config import settings
 from .models import MeetingAnalysis, Segment
 
@@ -414,6 +415,42 @@ def _fold_notes(notes: list[str], note: str, progress: ProgressFn) -> str:
         return joined[:budget]
 
     return joined
+
+
+def resolve_due_dates(analysis: MeetingAnalysis, recorded_at: str) -> MeetingAnalysis:
+    """Trasforma le scadenze dette a voce in date vere.
+
+    L'aritmetica sul calendario sta qui e non nel prompt: un modello che
+    conta i giorni sbaglia in silenzio, mentre `dates.resolve` è
+    deterministico e ha una batteria di prove. Il campo `due` resta la
+    citazione di ciò che è stato detto — è un verbale, non una lista di cose
+    da fare — e `due_at` ne è la traduzione in calendario.
+    """
+    if not recorded_at:
+        return analysis
+    try:
+        anchor = datetime.fromisoformat(recorded_at)
+    except ValueError:
+        log.warning("Data della riunione non interpretabile: %s", recorded_at)
+        return analysis
+
+    risolte = 0
+    for point in analysis.action_points:
+        resolved = dates.resolve(point.due, anchor)
+        if resolved["at"]:
+            point.due_at = str(resolved["at"])
+            point.due_precision = str(resolved["precision"])
+            risolte += 1
+        else:
+            point.due_at = ""
+            point.due_precision = ""
+
+    if analysis.action_points:
+        log.info(
+            "Scadenze risolte: %s su %s (ancora: %s)",
+            risolte, len(analysis.action_points), anchor.isoformat(timespec="minutes"),
+        )
+    return analysis
 
 
 def analyze(

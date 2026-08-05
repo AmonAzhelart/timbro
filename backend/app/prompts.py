@@ -152,7 +152,7 @@ principali della discussione, l'esito e ciò che resta da fare",
   "action_points": [
     {{"task": "azione concreta da svolgere",
       "owner": "nome della persona responsabile oppure 'Non assegnato'",
-      "due": "scadenza indicata oppure 'Non specificata'",
+      "due": "la scadenza ESATTAMENTE COME È STATA DETTA, oppure 'Non specificata'",
       "priority": "alta | media | bassa"}}
   ],
   "open_questions": ["questione rimasta senza risposta"]
@@ -181,7 +181,19 @@ Regole vincolanti su tutto il resto:
 - In "decisions" inserisci solo scelte effettivamente concordate, non proposte o ipotesi.
 - In "action_points" ogni voce deve iniziare con un verbo all'infinito (es. "Preparare il preventivo").
 - Non attribuire un owner se non è deducibile: usa "Non assegnato".
-- Non inventare date: se la scadenza non è citata usa "Non specificata".
+
+Regole sul campo "due" — leggile con attenzione, è cambiato:
+- Riporta la scadenza CON LE PAROLE USATE IN RIUNIONE: "entro domattina",
+  "venerdì prossimo", "fra due settimane", "il 15 settembre", "entro le 18".
+- NON convertire in una data di calendario e NON calcolare nulla: al calcolo
+  pensa il programma, che conosce data e ora esatte della riunione. Se provi a
+  contare i giorni sbagli, e l'errore diventa una scadenza sbagliata sul
+  calendario di qualcuno.
+- Una scadenza relativa È una scadenza: "domattina" va riportato, non
+  scartato come se non fosse stato detto nulla.
+- Usa "Non specificata" SOLO quando davvero non è stato indicato alcun
+  termine. "Appena possibile" e "quando sarà pronto" sono termini vaghi ma
+  reali: riportali come sono.
 - Non introdurre nulla che non sia nel contenuto qui sopra.
 - Se un elenco non ha elementi, restituisci una lista vuota [].
 - Rispondi SOLO con il JSON, nient'altro."""

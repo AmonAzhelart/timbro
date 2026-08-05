@@ -65,6 +65,18 @@ class Settings(BaseSettings):
     vad_offset: float = 0.363
     #: Rilevamento della lingua per segmento: utile su audio che mescola lingue.
     multilingual: bool = False
+
+    # --- Attribuzione delle voci ---
+    #: Attribuisce alla voce temporalmente più vicina anche le parole per cui
+    #: la diarizzazione non ha alcuna evidenza (pause, respiri, parole a
+    #: cavallo fra due turni). Copre tutto, ma inventa: è la causa principale
+    #: dei falsi cambi di parlante. Attivalo solo se restano segmenti anonimi.
+    diarization_fill_nearest: bool = False
+    #: Un cambio di voce che dura meno di così è rumore di confine, non un
+    #: turno: viene riassorbito da chi stava parlando. Basta superare UNA
+    #: delle due soglie perché il cambio sia accettato.
+    speaker_change_min_words: int = 2
+    speaker_change_min_s: float = 0.5
     #: Filtro passa-alto + riduzione rumore + normalizzazione prima dell'ASR.
     audio_preprocess: bool = False
     #: Ricognizione automatica: un primo passaggio veloce su alcuni estratti
@@ -89,6 +101,13 @@ class Settings(BaseSettings):
     #: "0" = scarica subito · "5m" = cinque minuti · "-1" = sempre in memoria.
     ollama_keep_alive: str = "5m"
     chunk_chars: int = 12000
+
+    # --- Ricerca ---
+    #: Ricerca per significato oltre a quella per parole esatte. Richiede un
+    #: modello di embedding su Ollama; se manca, la ricerca continua a
+    #: funzionare sulle sole parole esatte.
+    semantic_search: bool = True
+    embed_model: str = "nomic-embed-text"
 
     # --- App ---
     max_upload_mb: int = 1024

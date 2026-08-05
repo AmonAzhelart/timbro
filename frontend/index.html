@@ -145,7 +145,27 @@ header{display:flex;align-items:center;gap:var(--s3);height:var(--header-h);
   display:grid;place-items:center;font-size:17px;box-shadow:var(--glow)}
 .brand h1{font-size:17px;letter-spacing:-.03em;font-weight:750;white-space:nowrap}
 .brand .sub{color:var(--muted);font-size:11px;letter-spacing:.01em;white-space:nowrap}
+/* Navigazione principale: sono tre modi di guardare l'archivio, non un filtro
+   della barra laterale. In alto è il loro posto, e liberano spazio a sinistra. */
+.topnav{display:flex;gap:2px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:10px;padding:3px;margin-left:var(--s5);flex:none}
+.topnav button{border:0;background:none;color:var(--muted);font:inherit;
+  font-size:12.5px;font-weight:650;padding:6px 14px;border-radius:7px;cursor:pointer;
+  transition:.16s var(--ease);white-space:nowrap}
+.topnav button:hover{color:var(--text-2)}
+.topnav button[aria-current="true"]{background:var(--panel);color:var(--text);
+  box-shadow:var(--sh)}
+.topnav .n{font-size:9.5px;background:var(--accent-soft);color:var(--accent);
+  border-radius:99px;padding:0 5px;margin-left:5px;font-weight:750}
+
 .hgroup{display:flex;align-items:center;gap:var(--s2);margin-left:auto;min-width:0}
+/* Le pastiglie di stato sono l'unica cosa che può accorciarsi: nome della GPU
+   e messaggi del modello sono lunghi e variabili, e non devono spingere fuori
+   dall'intestazione il contatore o i comandi. */
+#health{flex:0 1 auto;min-width:0;overflow:hidden;flex-wrap:nowrap}
+#health .chip{min-width:0;overflow:hidden;text-overflow:ellipsis;display:inline-flex}
+.brand{flex:0 1 auto;overflow:hidden}
+.brand h1,.brand .sub{overflow:hidden;text-overflow:ellipsis}
 
 .chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel);
   border:1px solid var(--line);border-radius:99px;padding:5px 11px;
@@ -161,9 +181,14 @@ header{display:flex;align-items:center;gap:var(--s3);height:var(--header-h);
 .iconbtn:hover{color:var(--text);border-color:var(--accent);background:var(--accent-soft)}
 .iconbtn.on{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
 
-/* VRAM: compatta nell'intestazione, con etichetta solo quando c'è spazio */
+/* VRAM: compatta nell'intestazione. `flex:none` perché non venga compressa
+   quando le pastiglie di stato si allungano — è un contatore, se si stringe
+   non serve a niente. */
 .vram{background:var(--panel);border:1px solid var(--line);border-radius:99px;
-  padding:5px 12px;min-width:150px}
+  padding:5px 12px;min-width:150px;flex:none;transition:opacity .2s var(--ease)}
+/* Lettura non aggiornata: resta a schermo ma dichiara di essere ferma. */
+.vram.stale{opacity:.45}
+.vram.stale .track > i{filter:grayscale(1)}
 .vram .lbl{display:flex;justify-content:space-between;align-items:baseline;gap:9px;
   font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;
   font-weight:750;margin-bottom:4px}
@@ -178,12 +203,21 @@ header{display:flex;align-items:center;gap:var(--s3);height:var(--header-h);
 /* ============================================================
    3. Struttura a due colonne
    ============================================================ */
-.shell{display:grid;grid-template-columns:352px minmax(0,1fr);gap:var(--s4);
+/* Tre colonne: cartelle · riunioni · dettaglio. È l'impaginazione dei client
+   di posta, e vale qui per lo stesso motivo: la collocazione, l'elenco e il
+   contenuto sono tre livelli di scelta successivi, non tre cose impilate.
+   Prima cartelle ed etichette stavano sopra l'elenco nella stessa colonna e
+   lo spingevano fuori schermo. */
+.shell{display:grid;grid-template-columns:214px 336px minmax(0,1fr);gap:var(--s4);
   flex:1;min-height:0;padding:var(--s4) var(--s5) var(--s5);
-  max-width:1560px;width:100%;margin:0 auto}
-.side{display:flex;flex-direction:column;gap:var(--s3);min-height:0}
-.side-scroll{display:flex;flex-direction:column;gap:var(--s3);min-height:0;
+  max-width:1720px;width:100%;margin:0 auto}
+
+.rail{display:flex;flex-direction:column;gap:var(--s5);min-height:0;
   overflow-y:auto;padding-right:var(--s1);margin-right:calc(var(--s1) * -1)}
+.rail h2.t{margin-bottom:var(--s2)}
+.rail .sect{display:flex;flex-direction:column;min-height:0}
+.side{display:flex;flex-direction:column;gap:var(--s3);min-height:0}
+.side-scroll{display:flex;flex-direction:column;gap:var(--s3);min-height:0;flex:1}
 
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);
   box-shadow:var(--sh)}
@@ -604,8 +638,15 @@ tr:hover .rowdel,.tile:hover .rowdel,li:hover .rowdel{opacity:1}
 .tl .hd{display:flex;align-items:center;gap:var(--s2);margin-bottom:11px}
 .tl .hd .t{color:var(--muted);font-size:10.5px;text-transform:uppercase;
   letter-spacing:.09em;font-weight:750}
+/* `--nm-w` e `--nm-gap` sono la colonna dei nomi e lo spazio che la separa
+   dalle corsie. Da qui dipendono tre cose che devono restare allineate: la
+   griglia delle righe, il margine dell'asse dei tempi e la posizione del
+   cursore di riproduzione. Erano tre numeri scritti a mano in tre punti, e
+   il cursore infatti partiva dai nomi invece che da 0:00. */
+.tl{--nm-w:104px;--nm-gap:11px;--gutter:calc(var(--nm-w) + var(--nm-gap))}
 .tl .rows{display:flex;flex-direction:column;gap:4px}
-.tl .r{display:grid;grid-template-columns:104px minmax(0,1fr);gap:11px;align-items:center}
+.tl .r{display:grid;grid-template-columns:var(--nm-w) minmax(0,1fr);
+  gap:var(--nm-gap);align-items:center}
 .tl .who{font-size:11.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap;display:flex;align-items:center;gap:6px}
 .tl .lane{position:relative;height:19px;background:var(--panel-3);border-radius:5px;
@@ -617,30 +658,66 @@ tr:hover .rowdel,.tile:hover .rowdel,li:hover .rowdel{opacity:1}
 .tl .lane:hover .seg{opacity:.72}
 /* Testina di riproduzione: attraversa tutte le corsie */
 .tl .rows{position:relative}
+/* Il cursore scorre sulla sola larghezza delle corsie, non su tutta la riga:
+   a 0% deve stare sull'inizio della traccia, cioè su 0:00, non sul bordo
+   sinistro dei nomi. `--p` va da 0 a 1 ed è impostato dal player. */
 .tl .head{position:absolute;top:0;bottom:0;width:2px;background:var(--text);
-  pointer-events:none;left:0;opacity:0;transition:opacity .2s}
+  pointer-events:none;opacity:0;transition:opacity .2s;
+  left:calc(var(--gutter) + (100% - var(--gutter)) * var(--p, 0))}
 .tl .head.on{opacity:.85}
 .tl .head::before{content:'';position:absolute;top:-4px;left:-3px;width:8px;height:8px;
   border-radius:50%;background:var(--text)}
 .tl .axis{display:flex;justify-content:space-between;color:var(--muted);
-  font-size:10.5px;margin:8px 0 0 115px;font-variant-numeric:tabular-nums}
+  font-size:10.5px;margin:8px 0 0 var(--gutter);font-variant-numeric:tabular-nums}
 
-/* Flusso continuo: l'attribuzione la dà il colore, non un'intestazione
-   ripetuta ogni due righe. */
-.flow{max-width:var(--measure);font-size:15.5px;line-height:2.1;color:var(--text)}
-.flow .u{background:hsl(var(--h) var(--hl-sat) var(--hl-lit) / .13);border-radius:7px;
-  padding:.2em .45em;margin-right:.1em;border:0;font:inherit;color:inherit;
-  box-decoration-break:clone;-webkit-box-decoration-break:clone;
-  transition:background .16s var(--ease);cursor:pointer;text-align:left}
-.flow .u:hover{background:hsl(var(--h) var(--hl-sat) var(--hl-lit) / .28)}
-.flow .u.now{background:hsl(var(--h) var(--hl-sat) var(--hl-lit) / .34);
-  box-shadow:0 0 0 2px hsl(var(--h) var(--hl-sat) var(--hl-lit) / .55)}
-.flow .who{font-weight:800;font-size:.72em;letter-spacing:.05em;
-  text-transform:uppercase;color:hsl(var(--h) var(--hl-sat) 68%);margin-right:.5em;
-  white-space:nowrap}
-:root[data-theme="light"] .flow .who{color:hsl(var(--h) var(--hl-sat) 38%)}
-.flow .who .tm{opacity:.6;font-weight:600;margin-left:.4em;
+/* Lettura: impaginazione da trascrizione professionale — il nome in una
+   colonna stretta a sinistra, il testo in una colonna larga che scorre.
+   La versione precedente evidenziava ogni intervento con uno sfondo colorato:
+   su una riunione vera diventavano centinaia di macchie che si contendevano
+   l'attenzione, e il colore smetteva di significare qualcosa. Qui il colore
+   resta solo sul nome e su un filo verticale, e gli interventi consecutivi
+   della stessa persona diventano paragrafi di un unico blocco invece di
+   ripetere l'intestazione ogni due righe.
+   Nessun limite di larghezza: qui si consulta e si cerca, non si legge un
+   documento di prosa continua come nel verbale. */
+.read{display:flex;flex-direction:column;gap:var(--s4)}
+.read .grp{display:grid;grid-template-columns:132px minmax(0,1fr);gap:var(--s4);
+  align-items:start}
+.read .nm{display:flex;flex-direction:column;gap:2px;position:sticky;top:0;
+  padding-left:9px;border-left:2px solid hsl(var(--h) var(--hl-sat) var(--hl-lit));
+  font-size:12.5px;font-weight:750;line-height:1.4;
+  color:hsl(var(--h) var(--hl-sat) 68%);overflow-wrap:anywhere}
+:root[data-theme="light"] .read .nm{color:hsl(var(--h) var(--hl-sat) 36%)}
+.read .nm .tm{color:var(--muted);font-weight:600;font-size:10.5px;
   font-variant-numeric:tabular-nums}
+.read .tx{display:flex;flex-direction:column;gap:var(--s2);min-width:0}
+.read .u{font:inherit;color:var(--text);text-align:left;background:none;border:0;
+  padding:5px 9px;margin:0;border-radius:var(--r-sm);line-height:1.72;
+  cursor:pointer;transition:background .16s var(--ease)}
+.read .u:hover{background:var(--panel-2)}
+.read .u.now{background:hsl(var(--h) var(--hl-sat) var(--hl-lit) / .17);
+  box-shadow:inset 2px 0 0 hsl(var(--h) var(--hl-sat) var(--hl-lit))}
+
+/* ---------- Evidenziazione parola per parola ----------
+   L'intervento è l'unità sbagliata per seguire l'ascolto: dentro un blocco
+   il parlante può cambiare due o tre volte, e illuminando tutto il blocco
+   sembra che abbia parlato una persona sola. Ogni parola porta il proprio
+   istante, quindi si illumina quella. */
+.w{border-radius:3px;padding:0 1px;transition:background .09s linear,color .09s linear}
+.w.said{color:var(--text-2)}          /* già pronunciata */
+.w.now{background:hsl(var(--h) var(--hl-sat) var(--hl-lit) / .42);
+  color:var(--text);font-weight:600}
+/* Parola attribuita a una voce diversa da quella del blocco: senza questo
+   segno un cambio di parlante a metà intervento resta invisibile. */
+.w.alt{box-shadow:inset 0 -2px 0 hsl(var(--wh) var(--hl-sat) var(--hl-lit))}
+.turn .w.now,.ovl-block .w.now{background:var(--mark);color:var(--text)}
+/* Il cambio di voce dentro un intervento si annuncia con il nome, in linea. */
+.spk-shift{display:inline-flex;align-items:center;gap:4px;margin:0 5px 0 3px;
+  font-size:.72em;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  color:hsl(var(--wh) var(--hl-sat) 68%);white-space:nowrap;vertical-align:baseline}
+:root[data-theme="light"] .spk-shift{color:hsl(var(--wh) var(--hl-sat) 36%)}
+.spk-shift::before{content:'';width:7px;height:7px;border-radius:2px;flex:none;
+  background:hsl(var(--wh) var(--hl-sat) var(--hl-lit))}
 mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
   box-decoration-break:clone;-webkit-box-decoration-break:clone}
 
@@ -719,12 +796,194 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
 .player select.rate{width:auto;padding:5px 26px 5px 9px;font-size:11.5px;
   background-position:calc(100% - 13px) 55%,calc(100% - 8px) 55%}
 
+
+/* ============================================================
+   17. Archivio: cartelle, etichette, ricerca, cruscotto
+   ============================================================ */
+/* Navigazione fra le sezioni dell'applicazione. Finora il pannello di destra
+   mostrava sempre e solo una riunione; ora può mostrare anche la ricerca su
+   tutto l'archivio e il quadro degli impegni, che non appartengono a nessuna
+   riunione in particolare. */
+/* Albero delle cartelle. Il rientro è una variabile per livello: annidando
+   senza limiti serve che la profondità non richieda una regola nuova. */
+.tree{display:flex;flex-direction:column;gap:1px}
+.tnode{display:flex;align-items:center;gap:5px;padding:6px 8px;border-radius:var(--r-xs);
+  cursor:pointer;font-size:12.5px;transition:.14s var(--ease);border:0;
+  background:none;color:var(--text-2);font-family:inherit;text-align:left;width:100%}
+.tnode:hover{background:var(--panel-2);color:var(--text)}
+.tnode[aria-current="true"]{background:var(--accent-soft);color:var(--accent);font-weight:650}
+.tnode .tw{width:14px;flex:none;color:var(--muted);font-size:9px;text-align:center;
+  transition:transform .2s var(--ease)}
+.tnode .tw.open{transform:rotate(90deg)}
+.tnode .ic{flex:none;font-size:12px;opacity:.8}
+.tnode .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tnode .ct{color:var(--muted);font-size:10.5px;font-variant-numeric:tabular-nums;flex:none}
+.tnode.drop{outline:2px dashed var(--accent);outline-offset:-2px}
+/* Comandi della cartella: compaiono al passaggio del mouse, ma restano
+   raggiungibili da tastiera. Senza, una cartella si poteva creare e non più
+   rinominare né eliminare. */
+.tnode .more{opacity:0;flex:none;border:0;background:none;color:var(--muted);
+  cursor:pointer;font-size:14px;line-height:1;padding:0 2px;border-radius:4px;
+  transition:.14s var(--ease)}
+.tnode:hover .more,.tnode .more:focus-visible{opacity:1}
+.tnode .more:hover{color:var(--text);background:var(--panel-3)}
+.fmenu{position:fixed;z-index:70;background:var(--panel);border:1px solid var(--line-2);
+  border-radius:var(--r-sm);box-shadow:var(--sh-lg);padding:4px;min-width:196px;
+  animation:pop .14s var(--ease)}
+.fmenu button{display:flex;align-items:center;gap:9px;width:100%;border:0;
+  background:none;color:var(--text-2);font:inherit;font-size:12.5px;text-align:left;
+  padding:8px 10px;border-radius:var(--r-xs);cursor:pointer}
+.fmenu button:hover{background:var(--panel-2);color:var(--text)}
+.fmenu button.danger:hover{background:var(--err-soft);color:var(--err)}
+.fmenu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+
+/* Il trascinamento vale su tutta la finestra: cercare la zona giusta dove
+   lasciare il file è un'attenzione che si può risparmiare. */
+.dropveil{position:fixed;inset:0;z-index:95;display:none;place-items:center;
+  background:var(--scrim);backdrop-filter:blur(3px)}
+.dropveil.on{display:grid}
+.dropveil .box{border:2px dashed var(--accent);border-radius:var(--r-xl);
+  padding:44px 60px;background:var(--panel);text-align:center;box-shadow:var(--sh-lg)}
+.dropveil .ic{font-size:44px;display:block;margin-bottom:12px}
+.dropveil .big{font-size:17px;font-weight:700}
+.tkids{display:flex;flex-direction:column;gap:1px;
+  margin-left:11px;padding-left:6px;border-left:1px solid var(--line)}
+
+/* Etichette come filtri a pastiglia */
+.tagbar{display:flex;gap:5px;flex-wrap:wrap}
+.tagchip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);
+  background:var(--panel-2);border-radius:99px;padding:3px 10px;font-size:11px;
+  font-weight:650;cursor:pointer;color:var(--text-2);font-family:inherit;
+  transition:.14s var(--ease)}
+.tagchip:hover{border-color:var(--accent-line);color:var(--text)}
+.tagchip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);
+  color:var(--accent)}
+.tagchip .x{opacity:.5;font-size:13px;line-height:1}
+.tagchip .x:hover{opacity:1;color:var(--err)}
+
+/* Risultati di ricerca */
+.hit{display:block;width:100%;text-align:left;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:var(--r);padding:13px 15px;
+  margin-bottom:var(--s2);cursor:pointer;font:inherit;color:inherit;
+  transition:.16s var(--ease)}
+.hit:hover{border-color:var(--accent-line);background:var(--panel-3)}
+.hit .top{display:flex;align-items:baseline;gap:var(--s2);flex-wrap:wrap;margin-bottom:6px}
+.hit .ti{font-weight:700;font-size:13.5px}
+.hit .sn{color:var(--text-2);line-height:1.6;font-size:13px}
+.hit .why{margin-left:auto;font-size:10px;color:var(--muted);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+
+/* Cruscotto degli impegni */
+.apgroup{margin-bottom:var(--s5)}
+.apgroup > h4{font-size:12px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);font-weight:750;margin-bottom:var(--s2);
+  display:flex;align-items:center;gap:var(--s2)}
+.aprow{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:var(--s3);
+  align-items:start;padding:11px 13px;background:var(--panel-2);
+  border:1px solid var(--line);border-left:3px solid var(--line-2);
+  border-radius:var(--r);margin-bottom:6px;transition:.16s var(--ease)}
+.aprow.alta{border-left-color:var(--err)}
+.aprow.media{border-left-color:var(--warn)}
+.aprow.bassa{border-left-color:var(--ok)}
+.aprow.done{opacity:.5}
+.aprow.done .task{text-decoration:line-through}
+.aprow .task{font-weight:600;line-height:1.5;font-size:13.5px}
+.aprow .from{color:var(--muted);font-size:11px;margin-top:4px}
+.aprow .from a{color:var(--muted);text-decoration:underline}
+.aprow .when{text-align:right;font-size:11.5px;color:var(--text-2);white-space:nowrap}
+.aprow input[type=checkbox]{appearance:none;width:19px;height:19px;border-radius:6px;
+  border:1.5px solid var(--line-2);background:var(--panel);cursor:pointer;flex:none;
+  margin-top:1px;transition:.16s var(--ease);position:relative}
+.aprow input[type=checkbox]:checked{background:var(--ok);border-color:var(--ok)}
+.aprow input[type=checkbox]:checked::after{content:'✓';position:absolute;inset:0;
+  display:grid;place-items:center;color:#fff;font-size:12px;font-weight:800}
+
+@media(max-width:760px){
+  .aprow{grid-template-columns:26px minmax(0,1fr)}
+  .aprow .when{grid-column:2;text-align:left;margin-top:4px}
+}
+
+
+/* ============================================================
+   18. Task e calendario
+   ============================================================ */
+/* FullCalendar porta il proprio foglio di stile: qui si riporta soltanto nei
+   colori dell'applicazione, senza riscriverne il funzionamento. */
+.fc{--fc-border-color:var(--line);--fc-page-bg-color:transparent;
+  --fc-neutral-bg-color:var(--panel-2);--fc-today-bg-color:var(--accent-soft);
+  --fc-list-event-hover-bg-color:var(--panel-2);font-size:13px}
+.fc a{color:inherit;text-decoration:none}
+.fc .fc-toolbar-title{font-size:16px;font-weight:750;letter-spacing:-.02em}
+.fc .fc-button{background:var(--panel-2);border:1px solid var(--line);
+  color:var(--text-2);font-size:12.5px;font-weight:650;padding:6px 12px;
+  border-radius:var(--r-sm);box-shadow:none;text-transform:none}
+.fc .fc-button:hover{background:var(--panel-3);color:var(--text);border-color:var(--line-2)}
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active{background:var(--accent-soft);
+  border-color:var(--accent);color:var(--accent)}
+.fc .fc-button:disabled{opacity:.4}
+.fc .fc-col-header-cell-cushion{color:var(--muted);font-size:10.5px;
+  text-transform:uppercase;letter-spacing:.08em;font-weight:750;padding:8px 4px}
+.fc .fc-daygrid-day-number{color:var(--text-2);font-size:12px;padding:5px 7px}
+.fc .fc-day-today .fc-daygrid-day-number{color:var(--accent);font-weight:800}
+.fc .fc-day-other .fc-daygrid-day-number{opacity:.35}
+.fc-event{border:0;padding:0;background:none;cursor:pointer}
+.fc-event-main{padding:0}
+
+/* Voce del calendario: il colore è la priorità, la spunta lo stato. */
+.tev{display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:5px;
+  background:var(--panel-2);border-left:3px solid var(--line-2);
+  font-size:11.5px;line-height:1.35;overflow:hidden}
+.tev.alta{border-left-color:var(--err)}
+.tev.media{border-left-color:var(--warn)}
+.tev.bassa{border-left-color:var(--ok)}
+.tev.fatto{opacity:.45}
+.tev.fatto .tt{text-decoration:line-through}
+.tev .tt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.tev .who{color:var(--muted);font-size:10px;flex:none}
+
+/* Pannello del singolo task */
+.tpanel{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);z-index:75;
+  background:var(--panel);border-left:1px solid var(--line);box-shadow:var(--sh-lg);
+  display:flex;flex-direction:column;animation:slidein .24s var(--ease-out)}
+@keyframes slidein{from{transform:translateX(24px);opacity:0}to{transform:none;opacity:1}}
+.tpanel .top{display:flex;align-items:flex-start;gap:var(--s3);padding:var(--s4) var(--s5);
+  border-bottom:1px solid var(--line)}
+.tpanel .top h3{font-size:16px;font-weight:700;line-height:1.4;flex:1;letter-spacing:-.015em}
+.tpanel .body{flex:1;overflow-y:auto;padding:var(--s4) var(--s5)}
+.tpanel .foot{padding:var(--s3) var(--s5);border-top:1px solid var(--line);
+  background:var(--panel-2);display:flex;gap:var(--s2);flex-wrap:wrap}
+.tpanel .grid{display:grid;grid-template-columns:96px minmax(0,1fr);gap:var(--s2) var(--s3);
+  align-items:center;margin-bottom:var(--s4)}
+.tpanel .grid label{font-size:11.5px;color:var(--muted);font-weight:650}
+.tpanel .origin{background:var(--panel-2);border:1px solid var(--line);
+  border-radius:var(--r);padding:12px 14px;margin-bottom:var(--s4);font-size:12.5px}
+.tpanel .origin .k{font-size:10px;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--muted);font-weight:750;margin-bottom:5px}
+
+.thread{display:flex;flex-direction:column;gap:var(--s2)}
+.cmt{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-sm);
+  padding:10px 12px;font-size:12.5px;line-height:1.55}
+.cmt.sistema{background:transparent;border-style:dashed;color:var(--muted);font-size:11.5px}
+.cmt .when{color:var(--muted);font-size:10.5px;margin-top:5px;
+  font-variant-numeric:tabular-nums}
+
+/* Stati */
+.st-chip{display:inline-flex;align-items:center;gap:5px;border-radius:99px;
+  padding:2px 10px;font-size:10.5px;font-weight:750;white-space:nowrap}
+.st-da_fare{background:var(--panel-3);color:var(--text-2)}
+.st-in_corso{background:var(--accent-soft);color:var(--accent)}
+.st-bloccato{background:var(--err-soft);color:var(--err)}
+.st-fatto{background:var(--ok-soft);color:var(--ok)}
+.overdue{color:var(--err);font-weight:700}
+
 /* ============================================================
    15. Fuori tela su schermi piccoli
    ============================================================ */
-.drawer-btn{display:none}
+.drawer-btn,.rail-btn{display:none}
 .scrim{display:none;position:fixed;inset:0;background:var(--scrim);z-index:40;
   animation:fade .18s var(--ease)}
+.scrim.open{display:block}
 
 /* Portatili: l'indice del verbale diventa una tendina, non una colonna */
 @media(max-width:1240px){
@@ -739,6 +998,18 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
   .vindex a .tx{max-width:24ch}
 }
 
+/* Sotto i 1400px la colonna delle cartelle diventa un pannello a scomparsa:
+   toglierla dal flusso vale più che comprimere le altre due. */
+@media(max-width:1400px){
+  .shell{grid-template-columns:336px minmax(0,1fr)}
+  .rail{position:fixed;top:0;left:0;bottom:0;width:min(280px,84vw);z-index:52;
+    background:var(--panel);border-right:1px solid var(--line);padding:var(--s4);
+    transform:translateX(-102%);transition:transform .26s var(--ease-out);
+    box-shadow:var(--sh-lg);margin:0}
+  .rail.open{transform:none}
+  .rail-btn{display:grid}
+}
+
 /* Tablet e sotto: una colonna, elenco riunioni in un pannello a scomparsa */
 @media(max-width:1080px){
   body{height:auto;min-height:100dvh;overflow:visible;display:block}
@@ -746,12 +1017,13 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
   header{position:sticky;top:0}
   .shell{display:block;padding:var(--s3) var(--s4) var(--s6)}
   .drawer-btn{display:grid}
+  .topnav{margin-left:var(--s2)}
+  .topnav button{padding:6px 10px;font-size:12px}
   .side{position:fixed;top:0;left:0;bottom:0;width:min(340px,86vw);z-index:50;
     background:var(--panel);border-right:1px solid var(--line);
     padding:var(--s4);overflow-y:auto;transform:translateX(-102%);
     transition:transform .26s var(--ease-out);box-shadow:var(--sh-lg)}
   .side.open{transform:none}
-  .scrim.open{display:block}
   #detail{height:auto;overflow:visible}
   #detail .pane{overflow:visible}
   .vindex{max-height:none}
@@ -770,6 +1042,7 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
   header{padding:0 var(--s3);gap:var(--s2)}
   .brand .sub{display:none}
   .brand h1{font-size:16px}
+  .topnav .lbl{display:none}
   .hero{padding:var(--s3) var(--s4)}
   .hero h3{font-size:17px}
   .tabs{padding:0 var(--s4)}
@@ -780,8 +1053,13 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
   .apcards{display:flex}
   .turn{grid-template-columns:30px minmax(0,1fr);gap:var(--s2)}
   .turn .t{grid-column:1 / -1;padding-top:0;order:-1}
-  .tl .r{grid-template-columns:70px minmax(0,1fr);gap:var(--s2)}
-  .tl .axis{margin-left:78px}
+  /* Il nome torna sopra al testo: 132px di colonna su 360 di schermo
+     lascerebbero al parlato una fessura. */
+  .read .grp{grid-template-columns:minmax(0,1fr);gap:var(--s2)}
+  .read .nm{position:static;flex-direction:row;align-items:baseline;gap:var(--s2)}
+  /* Su schermo stretto cambia solo la larghezza della colonna nomi: cursore
+     e asse dei tempi seguono da soli. */
+  .tl{--nm-w:70px;--nm-gap:var(--s2)}
   .flow{font-size:15px;line-height:2}
   .modal{padding:0}
   .modal .box{border-radius:0;min-height:100dvh;max-width:none}
@@ -831,6 +1109,8 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
 <div class="wrap">
 
   <header>
+    <button class="iconbtn rail-btn" id="btnRail" aria-label="Apri cartelle ed etichette"
+            aria-expanded="false">📁</button>
     <button class="iconbtn drawer-btn" id="btnDrawer" aria-label="Apri l'elenco delle riunioni"
             aria-expanded="false">☰</button>
     <div class="brand">
@@ -840,22 +1120,90 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
         <div class="sub">Dalla voce al verbale · tutto in locale</div>
       </div>
     </div>
+    <nav class="topnav" id="mainNav" aria-label="Sezioni">
+      <button data-view="riunioni" aria-current="true">
+        <span class="lbl">Riunioni</span></button>
+      <button data-view="ricerca"><span class="lbl">Cerca</span> 🔍</button>
+      <button data-view="impegni"><span class="lbl">Impegni</span>
+        <span class="n" id="apCount"></span></button>
+    </nav>
+
     <div class="hgroup">
       <div class="vram hidden" id="vram"></div>
       <div class="row" id="health"></div>
       <button class="iconbtn" id="btnTheme" aria-label="Cambia tema"></button>
       <button class="iconbtn" id="btnHelp" aria-label="Scorciatoie da tastiera">?</button>
+      <button class="btn sm" id="btnNew">+ <span class="lbl">Nuova riunione</span></button>
       <button class="btn ghost sm" id="btnSettings">⚙ <span class="lbl">Impostazioni</span></button>
     </div>
   </header>
 
   <div class="shell">
-    <!-- ================= COLONNA SINISTRA ================= -->
+    <!-- ============ COLONNA 1: COLLOCAZIONE ============ -->
+    <aside class="rail" id="rail" aria-label="Cartelle ed etichette">
+      <div class="sect">
+        <h2 class="t">Cartelle
+          <button class="mini" id="btnNewFolder" style="margin-left:auto"
+                  title="Nuova cartella">+ Nuova</button>
+        </h2>
+        <div class="tree" id="tree"></div>
+      </div>
+      <div class="sect">
+        <h2 class="t">Etichette</h2>
+        <div class="tagbar" id="tagbar"></div>
+      </div>
+    </aside>
+
+    <!-- ============ COLONNA 2: ELENCO ============ -->
     <div class="side" id="side">
       <div class="side-scroll">
-        <div class="card">
-          <div class="bd">
-            <h2 class="t">Nuova riunione</h2>
+        <div class="card" style="display:flex;flex-direction:column;min-height:0">
+          <div class="bd" style="display:flex;flex-direction:column;min-height:0;flex:1">
+            <h2 class="t">Riunioni <span class="n" id="jobCount">0</span></h2>
+            <div class="search" style="margin-bottom:11px;flex:none">
+              <span class="ic" aria-hidden="true">🔍</span>
+              <!-- autocomplete="off" e un name non riconoscibile: senza, il
+                   browser ci infila il nome utente salvato e il filtro nasconde
+                   tutte le riunioni senza che sia chiaro perché. -->
+              <input type="search" id="jobSearch" placeholder="Filtra per nome…"
+                     aria-label="Filtra le riunioni" name="filtro-riunioni"
+                     autocomplete="off" autocorrect="off" spellcheck="false"
+                     data-form-type="other" data-lpignore="true">
+            </div>
+            <div class="jobs" id="jobs"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scrim" id="scrim"></div>
+
+    <!-- ================= COLONNA DESTRA ================= -->
+    <div class="card" id="detail">
+      <div class="empty">
+        <div class="ic" aria-hidden="true">📋</div>
+        <div class="h">Nessuna riunione selezionata</div>
+        <div class="muted">Carica un file audio per generare il verbale.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" role="status" aria-live="polite"></div>
+<div id="taskPanelHost"></div>
+
+<!-- FullCalendar, scaricato durante il build e servito in locale. Se manca,
+     la vista Impegni ripiega sull'elenco: la funzione resta, cambia la resa. -->
+<script data-vendor src="/static/vendor/fullcalendar.js"></script>
+
+<!-- ================= MODALE NUOVA RIUNIONE ================= -->
+<div class="modal hidden" id="uploadModal" role="dialog" aria-modal="true"
+     aria-labelledby="uploadTitle">
+  <div class="box">
+    <div class="top">
+      <h2 id="uploadTitle">🎙 Nuova riunione</h2>
+      <button class="x" id="btnCloseUpload" aria-label="Chiudi">&times;</button>
+    </div>
+    <div class="content">
 
             <div id="dropWrap">
               <div id="drop" role="button" tabindex="0"
@@ -880,6 +1228,19 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
               <details class="opts" id="jobOpts" open style="margin-top:13px">
                 <summary>Dettagli di questa riunione</summary>
                 <div class="inner">
+                  <div class="field" id="glossaryField">
+                    <label for="u_glossary">Glossario salvato</label>
+                    <div class="with-btn">
+                      <select id="u_glossary"></select>
+                      <button type="button" class="btn ghost" id="btnSaveGlossary"
+                              title="Salva questo contesto come glossario">Salva</button>
+                    </div>
+                    <div class="desc">
+                      Argomento e vocabolario di questa riunione, riutilizzabili sulle
+                      prossime. Sceglierne uno compila i due campi qui sotto.
+                    </div>
+                  </div>
+
                   <div class="field">
                     <label for="u_prompt">Di cosa si parla</label>
                     <textarea id="u_prompt" rows="3" placeholder="Es. Riunione tecnica in italiano su sviluppo software, container Docker e API."></textarea>
@@ -941,38 +1302,21 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
               <button class="btn wide" id="btnStart" style="margin-top:14px">
                 ▶ Avvia elaborazione
               </button>
-              <div id="uploadMsg" class="muted" style="margin-top:10px;text-align:center"></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" style="display:flex;flex-direction:column;min-height:0">
-          <div class="bd" style="display:flex;flex-direction:column;min-height:0;flex:1">
-            <h2 class="t">Riunioni <span class="n" id="jobCount">0</span></h2>
-            <div class="search" style="margin-bottom:11px;flex:none">
-              <span class="ic" aria-hidden="true">🔍</span>
-              <input type="search" id="jobSearch" placeholder="Filtra per nome…"
-                     aria-label="Filtra le riunioni">
-            </div>
-            <div class="jobs" id="jobs"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="scrim" id="scrim"></div>
-
-    <!-- ================= COLONNA DESTRA ================= -->
-    <div class="card" id="detail">
-      <div class="empty">
-        <div class="ic" aria-hidden="true">📋</div>
-        <div class="h">Nessuna riunione selezionata</div>
-        <div class="muted">Carica un file audio per generare il verbale.</div>
-      </div>
+              <div id="uploadFolder" class="desc" style="text-align:center;margin-top:10px"></div>
+            <div id="uploadMsg" class="muted" style="margin-top:6px;text-align:center"></div>
+            
     </div>
   </div>
 </div>
 
-<div id="toasts" role="status" aria-live="polite"></div>
+<!-- Velo che compare trascinando un file sulla finestra -->
+<div class="dropveil" id="dropveil" aria-hidden="true">
+  <div class="box">
+    <span class="ic" aria-hidden="true">📥</span>
+    <div class="big">Lascia qui il file</div>
+    <div class="muted" style="margin-top:6px">Si apre la finestra di caricamento</div>
+  </div>
+</div>
 
 <!-- ================= MODALE SCORCIATOIE ================= -->
 <div class="modal hidden" id="helpModal" role="dialog" aria-modal="true"
@@ -1148,6 +1492,47 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
             <span>Audio che mescola più lingue</span></label>
           <div class="desc">Rileva la lingua spezzone per spezzone. Inutile e più lento altrimenti.</div>
         </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Attribuzione delle voci</legend>
+        <div class="note info" style="margin:0 0 16px">
+          Se una persona sola sembra due che si interrompono a vicenda, il
+          problema è quasi sempre qui, non nel modello di diarizzazione.
+        </div>
+        <div class="two">
+          <div class="field">
+            <label for="s_spkwords">Cambio voce: parole minime</label>
+            <input type="number" id="s_spkwords" min="1" max="12" step="1">
+            <div class="desc">
+              Un cambio di parlante più corto di così viene riassorbito da chi
+              stava parlando. <b>1</b> disattiva la soglia.
+            </div>
+          </div>
+          <div class="field">
+            <label for="s_spksec">Cambio voce: durata minima (s)</label>
+            <input type="number" id="s_spksec" min="0" max="5" step="0.1">
+            <div class="desc">
+              Basta superare <b>una</b> delle due soglie perché il cambio sia
+              accettato: così restano le interiezioni brevi ma nette.
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="switch"><input type="checkbox" id="s_fillnear">
+            <span>Attribuisci anche le parole senza evidenza</span></label>
+          <div class="desc">
+            Assegna alla voce più vicina anche le parole su cui la diarizzazione
+            non si esprime — pause, respiri, parole a cavallo fra due turni.
+            Copre tutto ma inventa, ed è la causa principale dei falsi cambi di
+            parlante. Attivalo solo se ti restano interventi senza voce.
+          </div>
+        </div>
+        <div class="desc">
+          Queste tre voci agiscono sulla sola fase di riconoscimento: dopo
+          averle cambiate usa <b>↻ Rifai riconoscimento voci</b> su una riunione
+          già elaborata, senza ri-trascrivere l'audio.
+        </div>
         <div class="field">
           <label class="switch"><input type="checkbox" id="s_autoctx">
             <span>Deduci il contesto automaticamente</span></label>
@@ -1229,6 +1614,40 @@ mark{background:var(--mark);color:var(--text);border-radius:3px;padding:0 2px;
           <label for="s_url">Indirizzo di Ollama</label>
           <input type="text" id="s_url">
           <div class="desc">Cambialo solo se Ollama gira fuori da Docker.</div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Ricerca nell'archivio</legend>
+        <div class="field">
+          <label class="switch"><input type="checkbox" id="s_semantic">
+            <span>Cerca anche per significato</span></label>
+          <div class="desc">
+            Oltre alle parole esatte, trova le riunioni che <b>parlano</b> di
+            quello che chiedi anche se usano altre parole. Richiede un modello
+            di embedding su Ollama; se manca, la ricerca continua a funzionare
+            sulle sole parole esatte e te lo dice.
+          </div>
+        </div>
+        <div class="field">
+          <label for="s_embed">Modello di embedding</label>
+          <input type="text" id="s_embed" placeholder="nomic-embed-text">
+          <div class="desc">
+            Scaricalo con
+            <code>docker compose exec ollama ollama pull nomic-embed-text</code>.
+            È piccolo (~270 MB) e non resta in VRAM come il modello del verbale.
+          </div>
+        </div>
+        <div class="field">
+          <label>Indice</label>
+          <div class="row">
+            <button class="btn ghost" id="btnReindex">Ricostruisci indice</button>
+          </div>
+          <div class="desc">
+            Le riunioni elaborate prima di questa versione non sono ancora
+            nell'indice. Serve una volta sola; le nuove si indicizzano da sole.
+          </div>
+          <div id="reindexResult"></div>
         </div>
       </fieldset>
 
@@ -1394,28 +1813,74 @@ function syncSeparateToggle(h){
   }
 }
 
+/* Il polling si riarma SEMPRE, anche quando la lettura fallisce.
+   Nella versione precedente `setTimeout` stava solo sul percorso di successo:
+   bastava una singola chiamata andata male — l'API che riparte dopo un
+   rebuild, il driver occupato mentre Whisper alloca la memoria — perché il
+   contatore si nascondesse e non tornasse più fino a un ricaricamento della
+   pagina. Un errore momentaneo non è una GPU assente: si tiene l'ultimo
+   valore letto e lo si segnala come non aggiornato. */
+let vramTimer = null, vramFails = 0;
+
 async function loadVram(){
-  let g;
-  try { g = await api('/gpu'); }
-  catch(e){ return; }
+  clearTimeout(vramTimer);
   const el = $('#vram');
-  if(!g?.available || !g.total_mb){ el.classList.add('hidden'); return; }
+  let g = null;
 
-  const pct = v => Math.max(0, Math.min(100, (v / g.total_mb) * 100));
-  const asr = g.processes?.asr_mb || 0, llm = g.processes?.llm_mb || 0;
-  const other = Math.max(0, (g.used_mb || 0) - asr - llm);
-  const gb = v => (v / 1024).toFixed(1);
+  try {
+    g = await api('/gpu');
+    vramFails = 0;
+  } catch(e){
+    vramFails++;
+    // Finché abbiamo già un valore a schermo lo lasciamo, marcandolo obsoleto.
+    if(!el.classList.contains('hidden')) el.classList.add('stale');
+    // Ritenta con attesa crescente, senza martellare un'API che non risponde.
+    vramTimer = setTimeout(loadVram, Math.min(5000 * vramFails, 30000));
+    return;
+  }
 
-  el.classList.remove('hidden');
+  if(!g?.available || !g.total_gb){
+    // Nessuna GPU: si nasconde, ma si continua a controllare — su Docker può
+    // comparire dopo, e comunque l'utente non deve ricaricare per accorgersene.
+    el.classList.add('hidden');
+    vramTimer = setTimeout(loadVram, 15000);
+    return;
+  }
+
+  // I nomi dei campi seguono `gpu.py`, che riporta gigabyte già arrotondati.
+  // La versione precedente leggeva `total_mb`/`used_mb`/`processes.asr_mb`:
+  // campi che l'API non ha mai restituito, quindi il controllo iniziale era
+  // sempre falso e il contatore restava nascosto in ogni condizione.
+  const pct = v => Math.max(0, Math.min(100, (v / g.total_gb) * 100));
+  const asr = g.transcription_gb || 0;
+  const llm = g.llm_gb || 0;
+  const other = g.other_gb || 0;
+  const gb = v => Number(v || 0).toFixed(1);
+
+  // La barra ha tre colori e niente diceva quali: il dettaglio sta nel
+  // suggerimento, senza rubare altezza all'intestazione.
+  const detail = [
+    `Trascrizione: ${gb(asr)} GB`,
+    `Modello linguistico: ${gb(llm)} GB`,
+    `Altro: ${gb(other)} GB`,
+    `Libera: ${gb(g.free_gb)} GB`,
+    g.undercounting
+      ? 'La scheda riporta meno di quanto risulta dai processi: dentro un ' +
+        'container il dato di sistema non vede sempre le allocazioni altrui.'
+      : '',
+  ].filter(Boolean).join(' · ');
+
+  el.classList.remove('hidden', 'stale');
+  el.title = detail;
   el.innerHTML = `
     <div class="lbl"><span>VRAM</span>
-      <b>${gb(g.used_mb||0)} / ${gb(g.total_mb)} GB</b></div>
-    <div class="track" role="img" aria-label="Memoria video usata: ${gb(g.used_mb||0)} GB su ${gb(g.total_mb)}">
+      <b>${gb(g.used_gb)} / ${gb(g.total_gb)} GB</b></div>
+    <div class="track" role="img" aria-label="Memoria video: ${esc(detail)}">
       <i class="s-asr" style="width:${pct(asr)}%"></i>
       <i class="s-llm" style="width:${pct(llm)}%"></i>
       <i class="s-oth" style="width:${pct(other)}%"></i>
     </div>`;
-  setTimeout(loadVram, 5000);
+  vramTimer = setTimeout(loadVram, 5000);
 }
 
 /* ============================================================
@@ -1432,11 +1897,15 @@ async function loadJobs(){
 function paintJobs(){
   const el = $('#jobs');
   const q = jobFilter.trim().toLowerCase();
-  const list = q
-    ? JOBS.filter(j => `${j.title||''} ${j.filename}`.toLowerCase().includes(q))
-    : JOBS;
+  // Cartella, etichette e nome si combinano: sono tre restrizioni successive
+  // sullo stesso elenco, non tre modalità alternative.
+  let list = JOBS;
+  if(curFolder !== null) list = list.filter(j => j.folder_id === curFolder);
+  if(curTags.size) list = list.filter(j => [...curTags].every(t => (j.tags||[]).includes(t)));
+  if(q) list = list.filter(j => `${j.title||''} ${j.filename}`.toLowerCase().includes(q));
 
-  $('#jobCount').textContent = q ? `${list.length}/${JOBS.length}` : JOBS.length;
+  const filtered = list.length !== JOBS.length;
+  $('#jobCount').textContent = filtered ? `${list.length}/${JOBS.length}` : JOBS.length;
 
   if(!JOBS.length){
     el.innerHTML = `<div class="muted" style="text-align:center;padding:20px 0">
@@ -1444,8 +1913,23 @@ function paintJobs(){
     return;
   }
   if(!list.length){
-    el.innerHTML = `<div class="muted" style="text-align:center;padding:20px 0">
-      Nessuna riunione con questo nome.</div>`;
+    // Un filtro che nasconde tutto deve dire cosa sta filtrando e come
+    // toglierlo: altrimenti sembra che le riunioni siano sparite.
+    const attivi = [
+      curFolder !== null ? 'cartella' : '',
+      curTags.size ? 'etichette' : '',
+      q ? `nome «${esc(jobFilter)}»` : '',
+    ].filter(Boolean).join(' + ');
+    el.innerHTML = `<div class="muted" style="text-align:center;padding:18px 6px">
+      Nessuna delle ${JOBS.length} riunioni passa i filtri attivi (${attivi}).
+      <div style="margin-top:10px"><button class="mini" id="btnClearFilter">
+        Azzera tutti i filtri</button></div></div>`;
+    const b = $('#btnClearFilter');
+    if(b) b.onclick = () => {
+      jobFilter = ''; curFolder = null; curTags.clear();
+      $('#jobSearch').value = '';
+      paintTree(); paintTags(); paintJobs();
+    };
     return;
   }
 
@@ -1461,7 +1945,7 @@ function paintJobs(){
                 : j.status_label;
     const warn = (j.warnings||[]).length && j.status === 'done'
       ? ' <span class="tag w" style="font-size:9px">⚠</span>' : '';
-    return `<button type="button" class="job" data-id="${j.id}"
+    return `<button type="button" class="job" data-id="${j.id}" draggable="true"
               aria-current="${j.id===currentId}">
       <div class="nm">${esc(j.title || j.filename)}${warn}</div>
       <div class="mt">
@@ -1474,7 +1958,10 @@ function paintJobs(){
     </button>`;
   }).join('');
 
-  el.querySelectorAll('.job').forEach(n => n.onclick = () => selectJob(n.dataset.id));
+  el.querySelectorAll('.job').forEach(n => {
+    n.onclick = () => selectJob(n.dataset.id);
+    n.ondragstart = e => e.dataTransfer.setData('text/plain', n.dataset.id);
+  });
 }
 
 $('#jobSearch').oninput = e => { jobFilter = e.target.value; paintJobs(); };
@@ -1485,7 +1972,7 @@ function schedulePoll(){
     await loadJobs();
     // Durante la modifica non si ridisegna: si perderebbe quello che si sta
     // scrivendo. Il polling serve ai job in corso, non a questo.
-    if(currentId && !editing) await renderDetail(currentId);
+    if(currentId && !editing && mainView === 'riunioni') await renderDetail(currentId);
   }, 2000);
 }
 
@@ -1494,11 +1981,17 @@ async function selectJob(id){
   if(id !== currentId){
     // Stato che appartiene alla riunione precedente: azzerarlo qui evita che
     // il player evidenzi blocchi di un'altra trascrizione.
-    BLOCKS = []; nowBlock = -1; hidden = new Set(); onlyOverlaps = false;
+    BLOCKS = []; WORDS = []; nowBlock = -1; nowWord = -1;
+    hidden = new Set(); onlyOverlaps = false;
   }
   currentId = id;
   activeTab = 'verbale';
   searchTerm = '';
+  if(mainView !== 'riunioni'){
+    mainView = 'riunioni';
+    $$('#mainNav button').forEach(b =>
+      b.setAttribute('aria-current', b.dataset.view === 'riunioni'));
+  }
   closeDrawer();
   paintJobs();
   await renderDetail(id);
@@ -1509,11 +2002,16 @@ async function selectJob(id){
    ============================================================ */
 let activeTab = 'verbale';
 let searchTerm = '';
-let viewMode = localStorage.getItem('timbro.view') || 'flow';
+// 'read' = interventi raggruppati per voce · 'turns' = una riga per intervento.
+// Il vecchio valore 'flow' non esiste più: viene ricondotto a 'read'.
+let viewMode = localStorage.getItem('timbro.view') === 'turns' ? 'turns' : 'read';
 let onlyOverlaps = false;
 let hidden = new Set();        // voci escluse dalla lettura
 let JOB = null;                // job attualmente mostrato
 let editing = false, draft = null, dirty = false;
+//: Risoluzione nome voce accessibile anche fuori dalle funzioni di rendering
+//: (serve dentro renderWords, chiamata in profondità).
+let NAMEOF = s => s;
 
 const TABS = [
   ['verbale','Verbale'],
@@ -1619,6 +2117,7 @@ async function renderDetail(id){
 
   const a = j.analysis || {}, names = j.speaker_names || {};
   const nm = s => names[s] || s;
+  NAMEOF = nm;
   const counts = {
     verbale: (a.action_points||[]).length || '',
     trascrizione: (j.segments||[]).length || '',
@@ -1656,6 +2155,9 @@ async function renderDetail(id){
         <div class="metas">${metas}</div>
       </div>
       <div class="row">
+        <select id="jobFolder" style="width:auto;font-size:12.5px;padding:7px 30px 7px 11px"
+                aria-label="Cartella della riunione"></select>
+        <button class="mini" data-act="tag">🏷 Etichette</button>
         ${activeTab === 'verbale' && !editing
           ? `<button class="btn ghost sm" data-act="edit">✎ Modifica</button>` : ''}
         <button class="btn ghost sm" data-act="export">⬇ Esporta</button>
@@ -1696,7 +2198,14 @@ function bindActions(j){
     settings:  openSettings,
     edit:      () => startEditing(j),
     export:    () => openExport(j),
+    tag:       () => editTags(j),
   };
+  const folderSel = $('#jobFolder');
+  if(folderSel){
+    folderSel.innerHTML = `<option value="">📁 Nessuna cartella</option>` +
+      folderOptions('', 0, j.folder_id);
+    folderSel.onchange = () => fileJob(j.id, {folder_id: folderSel.value || null, move: true});
+  }
   $('#detail').querySelectorAll('[data-act]').forEach(b => {
     const fn = acts[b.dataset.act];
     if(fn) b.onclick = fn;
@@ -1709,6 +2218,56 @@ function bindActions(j){
 function apPriority(p){
   const v = (p || 'media').toLowerCase();
   return ['alta','media','bassa'].includes(v) ? v : 'media';
+}
+
+/* ---------- Testo di un intervento, parola per parola ----------
+   Con i tempi per parola ogni parola diventa un elemento con il proprio
+   istante: è ciò che permette di illuminare esattamente ciò che si sta
+   ascoltando invece dell'intero blocco. Se `words` è vuoto — allineamento non
+   eseguito, o job elaborati prima che il campo esistesse — si ricade sul testo
+   semplice, e l'evidenziazione torna a essere per intervento.
+   `WORDS` raccoglie i riferimenti in un unico elenco ordinato: al momento
+   dell'ascolto serve trovare la parola corrente con una ricerca binaria, non
+   scorrendo il DOM. */
+let WORDS = [];
+
+function renderWords(seg, q, blockSpeaker){
+  const list = seg.words || [];
+  if(!list.length) return hilite(seg.text, q);
+
+  const rx = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i') : null;
+  let last = blockSpeaker;
+  const out = [];
+
+  for(const w of list){
+    const text = (w.word || '').trim();
+    if(!text) continue;
+
+    // Cambio di voce a metà intervento: va dichiarato, altrimenti l'ascolto
+    // scorre su parole che nessuno attribuisce a chi le ha dette davvero.
+    if(w.speaker && w.speaker !== last){
+      out.push(`<span class="spk-shift" style="--wh:${hueOf(w.speaker)}"
+        >${esc(NAMEOF(w.speaker))}</span>`);
+      last = w.speaker;
+    }
+
+    const alt = w.speaker && w.speaker !== blockSpeaker;
+    const timed = w.start != null && w.end != null;
+    const body = rx && rx.test(text) ? hilite(text, q) : esc(text);
+
+    out.push(`<span class="w${alt ? ' alt' : ''}"${
+      alt ? ` style="--wh:${hueOf(w.speaker)}"` : ''}${
+      timed ? ` data-s="${w.start}" data-e="${w.end}"` : ''}>${body}</span>`);
+  }
+  return out.join(' ');
+}
+
+/* Indicizza le parole a schermo una volta sola, in ordine di tempo. */
+function indexWords(root){
+  WORDS = Array.from(root.querySelectorAll('.w[data-s]'))
+    .map(el => ({el, s: Number(el.dataset.s), e: Number(el.dataset.e)}))
+    .sort((a, b) => a.s - b.s);
+  nowWord = -1;
 }
 
 /* La ricerca dentro il verbale evidenzia senza nascondere: su un documento
@@ -1756,7 +2315,8 @@ function renderVerbale(j, nm){
     <div class="search">
       <span class="ic" aria-hidden="true">🔍</span>
       <input type="search" id="vSearch" placeholder="Cerca nel verbale…"
-             value="${esc(searchTerm)}" aria-label="Cerca nel verbale">
+             value="${esc(searchTerm)}" aria-label="Cerca nel verbale"
+             autocomplete="off" spellcheck="false" data-form-type="other">
     </div>
     <span class="muted" id="vCount"></span>
     <div class="spacer"></div>
@@ -2161,15 +2721,18 @@ function renderTranscript(j, nm){
       <div class="legend">${legendChips}</div>
       <div class="tools">
         <div class="seg-ctl" role="group" aria-label="Modalità di lettura">
-          <button data-view="flow" class="${viewMode==='flow'?'on':''}">Flusso</button>
-          <button data-view="turns" class="${viewMode==='turns'?'on':''}">A turni</button>
+          <button data-view="read" class="${viewMode==='read'?'on':''}"
+            title="Interventi consecutivi raggruppati per voce">Lettura</button>
+          <button data-view="turns" class="${viewMode==='turns'?'on':''}"
+            title="Una riga per intervento, con orario">A turni</button>
         </div>
         ${ovl?.count ? `<button class="mini ${onlyOverlaps?'on':''}" id="btnOnlyOvl"
            aria-pressed="${onlyOverlaps}">Solo sovrapposizioni</button>` : ''}
         <div class="search">
           <span class="ic" aria-hidden="true">🔍</span>
           <input type="search" id="txSearch" placeholder="Cerca nella trascrizione…"
-                 value="${esc(searchTerm)}" aria-label="Cerca nella trascrizione">
+                 value="${esc(searchTerm)}" aria-label="Cerca nella trascrizione"
+                 autocomplete="off" spellcheck="false" data-form-type="other">
         </div>
         <span class="muted" id="txCount"></span>
       </div>
@@ -2234,12 +2797,14 @@ function paintTranscript(j, nm){
     return;
   }
 
-  body.innerHTML = viewMode === 'flow'
-    ? `<div class="flow">${blocks.map((b,i) => renderBlockFlow(b,i,nm,q)).join(' ')}</div>`
+  body.innerHTML = viewMode === 'read'
+    ? renderRead(blocks, nm, q)
     : blocks.map((b,i) => renderBlockTurn(b,i,nm,q)).join('');
 
   body.querySelectorAll('[data-seek]').forEach(el =>
     el.onclick = () => seekTo(Number(el.dataset.seek)));
+  indexWords(body);
+  if(AUDIO) highlightWord(AUDIO.currentTime);
 }
 
 function ovlHeader(b, nm){
@@ -2261,7 +2826,8 @@ function ovlBody(b, nm, q){
   const sep = b.segs.some(s => s.separated);
 
   if(!sep || uniq.length <= 1){
-    return `<div class="tx">${hilite(uniq[0] || '', q)}</div>
+    const src = b.segs.find(s => (s.text || '').trim() === (uniq[0] || '')) || b.segs[0];
+    return `<div class="tx">${renderWords(src, q, src.speaker)}</div>
       <div class="why">Whisper trascrive un solo flusso audio: questa è la frase
         che ha distinto, e non è attribuibile con certezza a una delle voci.</div>`;
   }
@@ -2269,25 +2835,46 @@ function ovlBody(b, nm, q){
     <div class="voice">
       <span class="who"><span class="sw" aria-hidden="true"
         style="background:${colorOf(s.speaker)}"></span>${esc(nm(s.speaker))}</span>
-      <span class="tx">${hilite(s.text, q)}</span>
+      <span class="tx">${renderWords(s, q, s.speaker)}</span>
     </div>`).join('')}</div>`;
 }
 
-function renderBlockFlow(b, i, nm, q){
-  if(b.kind === 'ovl'){
-    return `<div class="ovl-block ${b.segs.some(s=>s.separated)?'sep':''}" id="b${i}"
-      data-seek="${b.start}" role="button" tabindex="0">
-      ${ovlHeader(b, nm)}${ovlBody(b, nm, q)}</div>`;
+/* Vista "Lettura": raggruppa gli interventi consecutivi della stessa persona
+   sotto un'unica intestazione. I blocchi restano però entità separate, con il
+   loro id e il loro istante: è ciò che permette al player di evidenziare il
+   punto esatto in ascolto invece dell'intero turno. */
+function renderRead(blocks, nm, q){
+  const out = [];
+  let i = 0;
+  while(i < blocks.length){
+    const b = blocks[i];
+
+    if(b.kind === 'ovl'){
+      out.push(`<div class="ovl-block ${b.segs.some(s=>s.separated)?'sep':''}" id="b${i}"
+        data-seek="${b.start}" role="button" tabindex="0">
+        ${ovlHeader(b, nm)}${ovlBody(b, nm, q)}</div>`);
+      i++;
+      continue;
+    }
+
+    const speaker = b.segs[0].speaker;
+    const run = [];
+    while(i < blocks.length && blocks[i].kind === 'solo'
+          && blocks[i].segs[0].speaker === speaker){
+      run.push([i, blocks[i]]);
+      i++;
+    }
+
+    out.push(`<div class="grp" style="--h:${hueOf(speaker)}">
+      <div class="nm">${esc(nm(speaker))}<span class="tm">${hms(run[0][1].start)}</span></div>
+      <div class="tx">${run.map(([k, blk]) =>
+        `<button type="button" class="u" id="b${k}" data-seek="${blk.start}"
+           title="Ascolta da ${hms(blk.start)}">${
+             renderWords(blk.segs[0], q, speaker)}</button>`
+        ).join('')}</div>
+    </div>`);
   }
-  const s = b.segs[0];
-  const prev = BLOCKS[i-1];
-  const changed = !prev || prev.kind === 'ovl' || prev.segs[0].speaker !== s.speaker;
-  const who = changed
-    ? `<span class="who">${esc(nm(s.speaker))}<span class="tm">${hms(s.start)}</span></span>`
-    : '';
-  return `<button type="button" class="u" id="b${i}" style="--h:${hueOf(s.speaker)}"
-    data-seek="${b.start}" title="${esc(nm(s.speaker))} · ${hms(s.start)}"
-    >${who}${hilite(s.text, q)}</button>`;
+  return `<div class="read">${out.join('')}</div>`;
 }
 
 function renderBlockTurn(b, i, nm, q){
@@ -2303,7 +2890,7 @@ function renderBlockTurn(b, i, nm, q){
       aria-hidden="true">${initials(nm(s.speaker))}</div>
     <div>
       <div class="sp">${esc(nm(s.speaker))}</div>
-      <div class="tx">${hilite(s.text, q)}</div>
+      <div class="tx">${renderWords(s, q, s.speaker)}</div>
     </div>
   </div>`;
 }
@@ -2352,7 +2939,7 @@ function afterTranscript(j, nm){
 /* ============================================================
    Player audio
    ============================================================ */
-let AUDIO = null, BLOCKS = [], nowBlock = -1, follow = true;
+let AUDIO = null, BLOCKS = [], nowBlock = -1, nowWord = -1, follow = true;
 
 function renderPlayerBar(j){
   return `<div class="player" id="player">
@@ -2388,7 +2975,7 @@ function renderPlayerBar(j){
 
 function teardownPlayer(){
   if(AUDIO){ AUDIO.pause(); AUDIO.remove(); AUDIO = null; }
-  BLOCKS = []; nowBlock = -1;
+  BLOCKS = []; WORDS = []; nowBlock = -1; nowWord = -1;
   document.body.classList.remove('has-player');
 }
 
@@ -2429,8 +3016,12 @@ function setupPlayer(j, nm){
     if(AUDIO.duration) $('#pDur').textContent = hms(AUDIO.duration);
     track.setAttribute('aria-valuenow', Math.floor(AUDIO.currentTime));
     const head = $('#tlHead');
-    if(head && d){ head.style.left = pct + '%'; head.classList.add('on'); }
+    if(head && d){
+      head.style.setProperty('--p', String(pct / 100));
+      head.classList.add('on');
+    }
     highlightNow(nm);
+    highlightWord(AUDIO.currentTime);
   };
 
   play.onclick = () => AUDIO.paused ? AUDIO.play() : AUDIO.pause();
@@ -2472,6 +3063,47 @@ function seekTo(sec){
   if(!AUDIO) return;
   AUDIO.currentTime = Math.max(0, sec);
   if(AUDIO.paused) AUDIO.play().catch(() => {});
+}
+
+/* Evidenzia la parola in ascolto.
+   `ontimeupdate` scatta circa quattro volte al secondo e le parole di una
+   riunione lunga sono decine di migliaia: la ricerca è binaria e si tocca
+   solo l'elemento che cambia, mai l'intero elenco. */
+function highlightWord(t){
+  if(!WORDS.length) return;
+
+  let lo = 0, hi = WORDS.length - 1, found = -1;
+  while(lo <= hi){
+    const mid = (lo + hi) >> 1;
+    if(t < WORDS[mid].s) hi = mid - 1;
+    else if(t >= WORDS[mid].e) lo = mid + 1;
+    else { found = mid; break; }
+  }
+  // Fra una parola e l'altra c'è silenzio, e nelle pause di una riunione ce
+  // n'è parecchio: si tiene accesa l'ultima parola detta, non la prossima da
+  // dire. `lo` è la prima parola che inizia dopo l'istante, quindi l'ultima
+  // conclusa è quella prima. Prima ancora dell'inizio non si illumina nulla.
+  if(found < 0) found = lo - 1;
+  if(found === nowWord) return;
+
+  const prev = nowWord;
+  if(WORDS[prev]) WORDS[prev].el.classList.remove('now');
+  nowWord = found;
+  if(found < 0 || !WORDS[found]){
+    // Riavvolto prima della prima parola: si spegne tutto.
+    WORDS.forEach(x => x.el.classList.remove('said'));
+    return;
+  }
+  WORDS[found].el.classList.add('now');
+
+  // Il passato si smorza: dà il senso dell'avanzamento senza altri elementi.
+  // Si tocca solo il tratto fra la posizione vecchia e quella nuova, non
+  // l'intero elenco: su una riunione lunga sarebbero decine di migliaia di
+  // elementi rivisitati a ogni parola.
+  const from = Math.max(0, Math.min(prev < 0 ? 0 : prev, found));
+  const to   = Math.max(prev < 0 ? WORDS.length - 1 : prev, found);
+  for(let k = from; k <= to && k < WORDS.length; k++)
+    WORDS[k].el.classList.toggle('said', k < found);
 }
 
 /* Evidenzia il blocco in ascolto e, se richiesto, lo tiene in vista. */
@@ -2526,14 +3158,17 @@ function renderSpeakers(j, names){
         aria-hidden="true">${initials(names[sp]||sp)}</div>
       <div>
         <input type="text" data-spk="${esc(sp)}" value="${esc(names[sp]||'')}"
-               placeholder="Nome di ${esc(sp)}" aria-label="Nome di ${esc(sp)}">
+               placeholder="Nome di ${esc(sp)}" aria-label="Nome di ${esc(sp)}"
+               list="spkKnown" autocomplete="off">
       </div>
       <div class="share">${Math.round(t/total*100)}%<br>
         <span style="font-size:10.5px">${hms(t)}</span></div>
     </div>`;
   }).join('');
 
-  return `<div class="muted" style="margin-bottom:15px;max-width:var(--measure)">
+  return `<datalist id="spkKnown"></datalist>
+    <div class="muted" style="margin-bottom:15px;max-width:var(--measure)">
+      <span id="spkHint"></span>
       Assegna un nome a ogni voce. Rigenerando, il verbale userà i nomi reali —
       ma se hai già corretto il verbale a mano, la rigenerazione lo sostituisce:
       in quel caso salva soltanto.
@@ -2545,7 +3180,21 @@ function renderSpeakers(j, names){
     </div>`;
 }
 
-function afterSpeakers(j){
+async function afterSpeakers(j){
+  // Le stesse persone tornano fra riunioni diverse: proporre i nomi già usati
+  // evita di riscriverli ogni volta a memoria.
+  try{
+    const known = await api('/speakers');
+    if(known.length){
+      const list = $('#spkKnown');
+      if(list) list.innerHTML = known.map(k =>
+        `<option value="${esc(k.name)}"></option>`).join('');
+      const hint = $('#spkHint');
+      if(hint) hint.textContent =
+        `${known.length} nomi già usati in passato: compaiono scrivendo nel campo.`;
+    }
+  }catch(e){}
+
   const r = $('#btnSpkRegen'), o = $('#btnSpkOnly');
   if(r) r.onclick = () => saveSpeakers(j.id, true);
   if(o) o.onclick = () => saveSpeakers(j.id, false);
@@ -2800,6 +3449,47 @@ $$('[data-ex]').forEach(b => b.onclick = () => {
   if(!$('#u_hotwords').value.trim()) $('#u_hotwords').value = e.hotwords;
 });
 
+function openUpload(){
+  $('#uploadModal').classList.remove('hidden');
+  // Se stai guardando una cartella, la riunione nuova finisce lì: è quasi
+  // sempre l'intenzione, e risparmia uno spostamento dopo.
+  const hint = $('#uploadFolder');
+  if(hint){
+    const f = FOLDERS.find(x => x.id === curFolder);
+    hint.textContent = f ? `Finirà nella cartella «${f.name}».`
+                         : 'Finirà fra le riunioni senza cartella.';
+  }
+}
+function closeUpload(){ $('#uploadModal').classList.add('hidden'); }
+
+$('#btnNew').onclick = openUpload;
+$('#btnCloseUpload').onclick = closeUpload;
+$('#uploadModal').onclick = e => { if(e.target.id === 'uploadModal') closeUpload(); };
+
+/* Trascinare un file ovunque sulla finestra apre il caricamento. `dragenter`
+   e `dragleave` si scatenano anche passando sopra gli elementi figli: il
+   contatore evita che il velo lampeggi. */
+let dragDepth = 0;
+const hasFiles = e => Array.from(e.dataTransfer?.types || []).includes('Files');
+window.addEventListener('dragenter', e => {
+  if(!hasFiles(e)) return;
+  dragDepth++;
+  $('#dropveil').classList.add('on');
+});
+window.addEventListener('dragleave', e => {
+  if(!hasFiles(e)) return;
+  if(--dragDepth <= 0){ dragDepth = 0; $('#dropveil').classList.remove('on'); }
+});
+window.addEventListener('dragover', e => { if(hasFiles(e)) e.preventDefault(); });
+window.addEventListener('drop', e => {
+  if(!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $('#dropveil').classList.remove('on');
+  const file = e.dataTransfer.files[0];
+  if(file){ openUpload(); stage(file); }
+});
+
 const drop = $('#drop'), fileInput = $('#file');
 drop.onclick = () => fileInput.click();
 drop.onkeydown = e => {
@@ -2850,6 +3540,9 @@ $('#btnStart').onclick = async () => {
     const job = await api('/jobs', {method:'POST', body: fd});
     toast('ok','Elaborazione avviata.');
     unstage();
+    closeUpload();
+    // La riunione nuova eredita la cartella che stavi guardando.
+    if(curFolder) await fileJob(job.id, {folder_id: curFolder, move: true});
     await loadJobs(); await selectJob(job.id);
   }catch(e){
     msg.innerHTML = `<span style="color:var(--err)">${esc(e.message)}</span>`;
@@ -2873,7 +3566,25 @@ function closeDrawer(){
 }
 $('#btnDrawer').onclick = () =>
   $('#side').classList.contains('open') ? closeDrawer() : openDrawer();
-$('#scrim').onclick = closeDrawer;
+
+/* Sotto i 1400px la colonna delle cartelle è a scomparsa: stesso schema
+   dell'elenco riunioni, così i due pannelli non possono restare aperti
+   insieme sopra lo stesso contenuto. */
+function closeRail(){
+  $('#rail').classList.remove('open');
+  $('#btnRail').setAttribute('aria-expanded','false');
+  if(!$('#side').classList.contains('open')) $('#scrim').classList.remove('open');
+}
+function openRail(){
+  closeDrawer();
+  $('#rail').classList.add('open');
+  $('#scrim').classList.add('open');
+  $('#btnRail').setAttribute('aria-expanded','true');
+}
+$('#btnRail').onclick = () =>
+  $('#rail').classList.contains('open') ? closeRail() : openRail();
+
+$('#scrim').onclick = () => { closeDrawer(); closeRail(); };
 
 $('#btnHelp').onclick = () => $('#helpModal').classList.remove('hidden');
 $('#btnCloseHelp').onclick = () => $('#helpModal').classList.add('hidden');
@@ -2886,11 +3597,13 @@ const typing = el => el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.i
 document.addEventListener('keydown', e => {
   /* Esc chiude, in ordine di profondità */
   if(e.key === 'Escape'){
+    if(!$('#uploadModal').classList.contains('hidden')){ closeUpload(); return; }
     if(!$('#exportModal').classList.contains('hidden')){
       $('#exportModal').classList.add('hidden'); return; }
     if(!$('#settingsModal').classList.contains('hidden')){ closeSettings(); return; }
     if(!$('#helpModal').classList.contains('hidden')){
       $('#helpModal').classList.add('hidden'); return; }
+    if($('#rail').classList.contains('open')){ closeRail(); return; }
     if($('#side').classList.contains('open')){ closeDrawer(); return; }
     if(editing){ stopEditing(currentId); return; }
     return;
@@ -2942,6 +3655,892 @@ document.addEventListener('keydown', e => {
 });
 
 /* ============================================================
+   Archivio: cartelle, etichette, glossari
+   ============================================================ */
+let FOLDERS = [], TAGS = [], GLOSSARIES = [];
+let curFolder = null;                 // cartella selezionata (null = tutte)
+let curTags = new Set();              // etichette usate come filtro
+let openFolders = new Set(JSON.parse(localStorage.getItem('timbro.open') || '[]'));
+let mainView = 'riunioni';            // riunioni | ricerca | impegni
+
+async function loadLibrary(){
+  try{
+    [FOLDERS, TAGS, GLOSSARIES] = await Promise.all([
+      api('/folders'), api('/tags'), api('/glossaries')]);
+  }catch(e){ return; }
+  paintTree();
+  paintTags();
+  paintGlossaries();
+}
+
+/* L'albero si costruisce dai figli di ogni nodo: la profondità non è limitata,
+   quindi non può esserci una regola per livello. */
+function paintTree(){
+  const byParent = {};
+  FOLDERS.forEach(f => (byParent[f.parent_id || ''] ||= []).push(f));
+
+  const branch = (parent) => (byParent[parent] || []).map(f => {
+    const kids = byParent[f.id] || [];
+    const open = openFolders.has(f.id);
+    return `<div>
+      <button class="tnode" data-folder="${f.id}" aria-current="${curFolder===f.id}"
+              draggable="false" title="${esc(f.name)}">
+        <span class="tw ${open?'open':''}" data-toggle="${f.id}"
+          >${kids.length ? '▸' : ''}</span>
+        <span class="ic" aria-hidden="true">${open && kids.length ? '📂' : '📁'}</span>
+        <span class="nm">${esc(f.name)}</span>
+        <span class="ct">${f.jobs || ''}</span>
+        <span class="more" role="button" tabindex="0" data-menu="${f.id}"
+              aria-label="Comandi della cartella ${esc(f.name)}">⋯</span>
+      </button>
+      ${kids.length && open ? `<div class="tkids">${branch(f.id)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  $('#tree').innerHTML = `
+    <button class="tnode" data-folder="" aria-current="${curFolder===null}">
+      <span class="tw"></span><span class="ic" aria-hidden="true">🗂</span>
+      <span class="nm">Tutte le riunioni</span>
+      <span class="ct">${JOBS.length}</span>
+    </button>${branch('')}`;
+
+  $$('#tree .tnode').forEach(n => {
+    n.onclick = e => {
+      const m = e.target.closest('[data-menu]');
+      if(m){ e.stopPropagation(); return folderMenu(m); }
+      const t = e.target.closest('[data-toggle]');
+      if(t){
+        const id = t.dataset.toggle;
+        openFolders.has(id) ? openFolders.delete(id) : openFolders.add(id);
+        localStorage.setItem('timbro.open', JSON.stringify([...openFolders]));
+        return paintTree();
+      }
+      curFolder = n.dataset.folder || null;
+      if(curFolder) openFolders.add(curFolder);
+      closeRail();
+      goView('riunioni');
+      paintTree(); paintJobs();
+    };
+    // Trascinare una riunione su una cartella la sposta: è il gesto naturale
+    // e risparmia un menu.
+    n.ondragover = e => { e.preventDefault(); n.classList.add('drop'); };
+    n.ondragleave = () => n.classList.remove('drop');
+    n.ondrop = async e => {
+      e.preventDefault(); n.classList.remove('drop');
+      const jobId = e.dataTransfer.getData('text/plain');
+      if(!jobId) return;
+      await fileJob(jobId, {folder_id: n.dataset.folder || null, move: true});
+    };
+  });
+}
+
+function paintTags(){
+  $('#tagbar').innerHTML = TAGS.length
+    ? TAGS.map(t => `<button class="tagchip" data-tag="${t.id}"
+        aria-pressed="${curTags.has(t.id)}">${esc(t.name)}
+        <span class="ct" style="opacity:.6">${t.jobs || 0}</span>
+        <span class="x" data-deltag="${t.id}" title="Elimina etichetta">×</span></button>`).join('')
+    : `<span class="muted" style="font-size:11.5px">Nessuna etichetta.
+        Creale dal pannello di una riunione.</span>`;
+
+  $$('#tagbar .tagchip').forEach(b => b.onclick = async e => {
+    if(e.target.dataset.deltag){
+      if(!confirm('Eliminare questa etichetta da tutte le riunioni?')) return;
+      await api('/tags/' + e.target.dataset.deltag, {method:'DELETE'});
+      curTags.delete(e.target.dataset.deltag);
+      await loadLibrary(); await loadJobs();
+      return;
+    }
+    const id = b.dataset.tag;
+    curTags.has(id) ? curTags.delete(id) : curTags.add(id);
+    goView('riunioni');
+    paintTags(); paintJobs();
+  });
+}
+
+function paintGlossaries(){
+  const sel = $('#u_glossary');
+  if(!sel) return;
+  sel.innerHTML = `<option value="">— nessuno —</option>` +
+    GLOSSARIES.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  sel.onchange = () => {
+    const g = GLOSSARIES.find(x => x.id === sel.value);
+    if(!g) return;
+    $('#u_prompt').value = g.prompt || '';
+    $('#u_hotwords').value = g.hotwords || '';
+  };
+}
+
+/* Menu di una cartella. Le tre azioni che servono davvero: rinomina, crea
+   sottocartella, elimina. Niente di più, e l'eliminazione dice cosa succede
+   alle riunioni contenute — che non vengono toccate. */
+function folderMenu(anchor){
+  document.querySelector('.fmenu')?.remove();
+  const id = anchor.dataset.menu;
+  const folder = FOLDERS.find(f => f.id === id);
+  if(!folder) return;
+
+  const menu = document.createElement('div');
+  menu.className = 'fmenu';
+  menu.innerHTML = `
+    <button data-do="rename">✎ Rinomina</button>
+    <button data-do="child">📁 Nuova sottocartella</button>
+    <hr>
+    <button data-do="delete" class="danger">🗑 Elimina cartella</button>`;
+  document.body.appendChild(menu);
+
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.min(r.left, innerWidth - menu.offsetWidth - 12) + 'px';
+  menu.style.top = Math.min(r.bottom + 4, innerHeight - menu.offsetHeight - 12) + 'px';
+
+  const close = () => { menu.remove(); document.removeEventListener('mousedown', away); };
+  const away = e => { if(!menu.contains(e.target)) close(); };
+  setTimeout(() => document.addEventListener('mousedown', away), 0);
+
+  menu.querySelectorAll('[data-do]').forEach(b => b.onclick = async () => {
+    close();
+    try{
+      if(b.dataset.do === 'rename'){
+        const name = prompt('Nuovo nome della cartella:', folder.name);
+        if(!name || !name.trim() || name.trim() === folder.name) return;
+        await api('/folders/' + id, {method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({name: name.trim()})});
+        toast('ok','Cartella rinominata.');
+      }
+      if(b.dataset.do === 'child'){
+        const name = prompt(`Nome della sottocartella dentro «${folder.name}»:`);
+        if(!name || !name.trim()) return;
+        await api('/folders', {method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({name: name.trim(), parent_id: id})});
+        openFolders.add(id);
+        toast('ok','Sottocartella creata.');
+      }
+      if(b.dataset.do === 'delete'){
+        const figlie = FOLDERS.filter(f => f.parent_id === id).length;
+        const msg = `Eliminare la cartella «${folder.name}»?` +
+          (figlie ? `\n\nVerranno eliminate anche ${figlie} sottocartelle.` : '') +
+          `\n\nLe riunioni contenute NON vengono eliminate: tornano fra le ` +
+          `riunioni senza cartella.`;
+        if(!confirm(msg)) return;
+        await api('/folders/' + id, {method:'DELETE'});
+        if(curFolder === id) curFolder = null;
+        toast('ok','Cartella eliminata. Le riunioni sono rimaste.');
+      }
+      await loadLibrary(); await loadJobs();
+    }catch(e){ toast('err', esc(e.message)); }
+  });
+}
+
+$('#btnNewFolder').onclick = async () => {
+  const name = prompt(curFolder
+    ? 'Nome della nuova sottocartella:' : 'Nome della nuova cartella:');
+  if(!name || !name.trim()) return;
+  try{
+    await api('/folders', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name: name.trim(), parent_id: curFolder})});
+    if(curFolder) openFolders.add(curFolder);
+    await loadLibrary();
+    toast('ok','Cartella creata.');
+  }catch(e){ toast('err', esc(e.message)); }
+};
+
+$('#btnSaveGlossary').onclick = async () => {
+  const name = prompt('Nome del glossario:');
+  if(!name || !name.trim()) return;
+  try{
+    await api('/glossaries', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name: name.trim(), prompt: $('#u_prompt').value.trim(),
+                            hotwords: $('#u_hotwords').value.trim(),
+                            folder_id: curFolder})});
+    await loadLibrary();
+    toast('ok','Glossario salvato.');
+  }catch(e){ toast('err', esc(e.message)); }
+};
+
+/* Le cartelle in una tendina perdono la gerarchia: il rientro con spazi
+   unificatori è l'unico modo per restituirla dentro un <select>. */
+function folderOptions(parent, depth, selected){
+  return FOLDERS.filter(f => (f.parent_id || '') === parent).map(f =>
+    `<option value="${f.id}"${f.id === selected ? ' selected' : ''}>${
+      '\u00a0\u00a0'.repeat(depth)}${depth ? '└ ' : '📁 '}${esc(f.name)}</option>` +
+    folderOptions(f.id, depth + 1, selected)).join('');
+}
+
+async function editTags(job){
+  const current = new Set(job.tags || []);
+  const scelta = prompt(
+    'Etichette separate da virgola.\n' +
+    (TAGS.length ? 'Esistenti: ' + TAGS.map(t => t.name).join(', ') : 'Nessuna ancora.'),
+    TAGS.filter(t => current.has(t.id)).map(t => t.name).join(', '));
+  if(scelta === null) return;
+
+  const wanted = scelta.split(',').map(x => x.trim()).filter(Boolean);
+  const ids = [];
+  try{
+    for(const name of wanted){
+      const found = TAGS.find(t => t.name.toLowerCase() === name.toLowerCase());
+      ids.push(found ? found.id : (await api('/tags', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({name})})).id);
+    }
+    await api('/jobs/' + job.id + '/filing', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({tags: ids})});
+    await loadJobs(); await loadLibrary(); await renderDetail(job.id);
+    toast('ok','Etichette aggiornate.');
+  }catch(e){ toast('err', esc(e.message)); }
+}
+
+async function fileJob(jobId, payload){
+  try{
+    await api('/jobs/' + jobId + '/filing', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)});
+    await loadJobs(); await loadLibrary();
+    if(currentId === jobId) await renderDetail(jobId);
+    toast('ok','Riunione spostata.');
+  }catch(e){ toast('err', esc(e.message)); }
+}
+
+/* ============================================================
+   Sezioni
+   ============================================================ */
+function goView(view){
+  mainView = view;
+  $$('#mainNav button').forEach(b =>
+    b.setAttribute('aria-current', b.dataset.view === view));
+  if(view === 'ricerca') renderSearch();
+  else if(view === 'impegni') renderTaskBoard();
+  else if(currentId) renderDetail(currentId);
+  else renderEmptyDetail();
+}
+
+function renderEmptyDetail(){
+  teardownPlayer();
+  $('#detail').innerHTML = `<div class="empty">
+    <div class="ic" aria-hidden="true">📋</div>
+    <div class="h">Nessuna riunione selezionata</div>
+    <div class="muted">Carica un file audio per generare il verbale.</div></div>`;
+}
+
+$$('#mainNav button').forEach(b => b.onclick = async () => {
+  if(!(await confirmDiscard())) return;
+  closeRail(); closeDrawer();
+  goView(b.dataset.view);
+});
+
+/* ============================================================
+   Ricerca su tutto l'archivio
+   ============================================================ */
+let searchQuery = '', searchKinds = '', searchTimer = null;
+
+const SEARCH_KINDS = [
+  ['', 'Ovunque'],
+  ['trascrizione', 'Trascrizione'],
+  ['argomento,sintesi,titolo', 'Verbale'],
+  ['impegno', 'Impegni'],
+  ['decisione', 'Decisioni'],
+];
+
+function renderSearch(){
+  teardownPlayer();
+  $('#detail').innerHTML = `
+    <div class="hero">
+      <div style="min-width:0">
+        <h3>Cerca in tutte le riunioni</h3>
+        <div class="muted" style="margin-top:4px">
+          Parole esatte e significato insieme: puoi cercare «preventivo Acme»
+          oppure descrivere l'argomento con parole tue.
+        </div>
+      </div>
+    </div>
+    <div class="pane" id="panel">
+      <div class="vbar">
+        <div class="search">
+          <span class="ic" aria-hidden="true">🔍</span>
+          <input type="search" id="gSearch" placeholder="Cosa stai cercando?"
+                 value="${esc(searchQuery)}" aria-label="Cerca nell'archivio"
+                 autocomplete="off" spellcheck="false" data-form-type="other">
+        </div>
+        <div class="seg-ctl" role="group" aria-label="Dove cercare">
+          ${SEARCH_KINDS.map(([k,l]) =>
+            `<button data-kind="${k}" class="${searchKinds===k?'on':''}">${l}</button>`).join('')}
+        </div>
+      </div>
+      <div id="gResults"></div>
+    </div>`;
+
+  const box = $('#gSearch');
+  box.focus();
+  box.oninput = () => {
+    searchQuery = box.value;
+    // Attesa breve: la ricerca per significato interroga un modello, e
+    // lanciarla a ogni tasto lo terrebbe occupato per nulla.
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 320);
+  };
+  $$('#panel .seg-ctl button').forEach(b => b.onclick = () => {
+    searchKinds = b.dataset.kind;
+    $$('#panel .seg-ctl button').forEach(x => x.classList.toggle('on', x === b));
+    runSearch();
+  });
+  if(searchQuery) runSearch();
+}
+
+async function runSearch(){
+  const out = $('#gResults');
+  if(!out) return;
+  const q = searchQuery.trim();
+  if(!q){
+    out.innerHTML = `<div class="empty"><div class="ic" aria-hidden="true">🔎</div>
+      <div class="h">Scrivi cosa cerchi</div>
+      <div class="muted">Un nome, una cifra, oppure la descrizione di un argomento.</div></div>`;
+    return;
+  }
+  out.innerHTML = `<div class="muted" style="padding:20px 0">
+    <span class="spin"></span> Ricerca in corso…</div>`;
+
+  let r;
+  try{
+    r = await api('/search?q=' + encodeURIComponent(q) +
+                  (searchKinds ? '&kinds=' + encodeURIComponent(searchKinds) : ''));
+  }catch(e){ out.innerHTML = `<div class="note err">${esc(e.message)}</div>`; return; }
+
+  const head = `<div class="row" style="margin-bottom:14px">
+    <span class="muted">${r.hits.length} risultati</span>
+    ${r.semantic
+      ? '<span class="tag g">anche per significato</span>'
+      : '<span class="tag w">solo parole esatte</span>'}
+    ${r.note ? `<span class="muted" style="font-size:11px">${esc(r.note)}</span>` : ''}
+  </div>`;
+
+  if(!r.hits.length){
+    out.innerHTML = head + `<div class="empty"><div class="ic" aria-hidden="true">🤷</div>
+      <div class="h">Nessun risultato</div>
+      <div class="muted">Prova parole diverse, o descrivi l'argomento a parole tue.</div></div>`;
+    return;
+  }
+
+  out.innerHTML = head + r.hits.map(h => `
+    <button class="hit" data-job="${h.job_id}" data-kind="${h.kind}" data-ref="${esc(h.ref)}">
+      <div class="top">
+        <span class="tag">${esc(h.kind_label)}</span>
+        <span class="ti">${esc(h.job_title)}</span>
+        ${h.label && h.label !== h.job_title
+          ? `<span class="muted" style="font-size:11.5px">${esc(h.label)}</span>` : ''}
+        <span class="why">${h.exact ? 'parole' : ''}${h.exact && h.semantic ? ' + ' : ''}${
+          h.semantic ? 'significato' : ''}</span>
+      </div>
+      <div class="sn">${esc(h.snippet)}</div>
+    </button>`).join('');
+
+  out.querySelectorAll('.hit').forEach(b => b.onclick = async () => {
+    await selectJob(b.dataset.job);
+    // Un risultato che non ti porta al punto esatto vale metà: se viene dalla
+    // trascrizione si apre quella scheda e si salta all'istante.
+    if(b.dataset.kind === 'trascrizione' && b.dataset.ref){
+      activeTab = 'trascrizione';
+      await renderDetail(b.dataset.job);
+      setTimeout(() => seekTo(Number(b.dataset.ref)), 250);
+    }
+  });
+}
+
+/* ============================================================
+   Cruscotto degli impegni
+   ============================================================ */
+let apGroupBy = localStorage.getItem('timbro.apgroup') || 'owner';
+let apShowDone = false;
+
+async function refreshActionCount(){
+  try{
+    const points = await api('/action-points');
+    const el = $('#apCount');
+    if(el) el.textContent = points.length || '';
+  }catch(e){}
+}
+
+async function renderActionBoard(){
+  teardownPlayer();
+  $('#detail').innerHTML = `
+    <div class="hero">
+      <div style="min-width:0">
+        <h3>Impegni presi</h3>
+        <div class="muted" style="margin-top:4px">
+          Tutti gli action point di tutte le riunioni. È il motivo per cui si
+          scrivono i verbali.
+        </div>
+      </div>
+    </div>
+    <div class="pane" id="panel">
+      <div class="vbar">
+        <div class="seg-ctl" role="group" aria-label="Raggruppamento">
+          <button data-group="owner" class="${apGroupBy==='owner'?'on':''}">Per persona</button>
+          <button data-group="due" class="${apGroupBy==='due'?'on':''}">Per scadenza</button>
+          <button data-group="job" class="${apGroupBy==='job'?'on':''}">Per riunione</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="mini ${apShowDone?'on':''}" id="btnShowDone"
+          aria-pressed="${apShowDone}">Mostra completati</button>
+      </div>
+      <div id="apBody"><div class="muted"><span class="spin"></span> Caricamento…</div></div>
+    </div>`;
+
+  $$('#panel .seg-ctl button').forEach(b => b.onclick = () => {
+    apGroupBy = b.dataset.group;
+    localStorage.setItem('timbro.apgroup', apGroupBy);
+    renderActionBoard();
+  });
+  $('#btnShowDone').onclick = () => { apShowDone = !apShowDone; renderActionBoard(); };
+
+  let points;
+  try{ points = await api('/action-points?include_done=' + apShowDone); }
+  catch(e){ $('#apBody').innerHTML = `<div class="note err">${esc(e.message)}</div>`; return; }
+
+  if(!points.length){
+    $('#apBody').innerHTML = `<div class="empty"><div class="ic" aria-hidden="true">✅</div>
+      <div class="h">Nessun impegno aperto</div>
+      <div class="muted">Gli action point dei verbali compaiono qui.</div></div>`;
+    return;
+  }
+
+  const keyOf = p => apGroupBy === 'owner' ? (p.owner || 'Non assegnato')
+                   : apGroupBy === 'job'   ? p.job_title
+                   : (p.due && p.due !== 'Non specificata' ? p.due : 'Senza scadenza');
+  const groups = {};
+  points.forEach(p => (groups[keyOf(p)] ||= []).push(p));
+
+  // "Non assegnato" e "Senza scadenza" in fondo: sono il residuo, non il punto.
+  const order = Object.keys(groups).sort((a, b) => {
+    const weak = k => /^(non assegnat|senza scadenz)/i.test(k) ? 1 : 0;
+    return weak(a) - weak(b) || a.localeCompare(b, 'it');
+  });
+
+  $('#apBody').innerHTML = order.map(k => `
+    <div class="apgroup">
+      <h4>${esc(k)} <span class="tag">${groups[k].length}</span></h4>
+      ${groups[k].map(p => `
+        <div class="aprow ${apPriority(p.priority)} ${p.done?'done':''}">
+          <input type="checkbox" ${p.done?'checked':''}
+                 data-job="${p.job_id}" data-idx="${p.index}"
+                 aria-label="Segna come completato">
+          <div>
+            <div class="task">${esc(p.task)}</div>
+            <div class="from">da <a href="#" data-open="${p.job_id}">${esc(p.job_title)}</a>
+              · ${esc(p.job_created.slice(0,10))}
+              ${apGroupBy !== 'owner' ? ' · ' + esc(p.owner || 'Non assegnato') : ''}</div>
+          </div>
+          <div class="when">
+            ${apGroupBy !== 'due' && p.due && p.due !== 'Non specificata'
+              ? esc(p.due) : ''}
+            <div><span class="pri ${apPriority(p.priority)}">${apPriority(p.priority)}</span></div>
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
+
+  $$('#apBody input[type=checkbox]').forEach(c => c.onchange = async () => {
+    try{
+      await api('/jobs/' + c.dataset.job + '/action-points/' + c.dataset.idx +
+                '?done=' + c.checked, {method:'POST'});
+      c.closest('.aprow').classList.toggle('done', c.checked);
+      refreshActionCount();
+      if(!apShowDone && c.checked)
+        setTimeout(renderActionBoard, 400);
+    }catch(e){ toast('err', esc(e.message)); c.checked = !c.checked; }
+  });
+
+  $$('#apBody [data-open]').forEach(a => a.onclick = async e => {
+    e.preventDefault();
+    await selectJob(a.dataset.open);
+  });
+}
+
+/* ============================================================
+   Task: calendario, elenco, pannello di dettaglio
+   ============================================================ */
+let TASKS = [], taskView = localStorage.getItem('timbro.taskview') || 'calendario';
+let calendar = null, openTask = null;
+
+const ST_LABEL = {da_fare:'Da fare', in_corso:'In corso', bloccato:'Bloccato', fatto:'Fatto'};
+const hasCalendar = () => typeof FullCalendar !== 'undefined';
+
+async function loadTasks(){
+  try { TASKS = await api('/tasks'); } catch(e){ TASKS = []; }
+  const el = $('#apCount');
+  if(el){
+    const aperti = TASKS.filter(t => t.status !== 'fatto').length;
+    el.textContent = aperti || '';
+  }
+  return TASKS;
+}
+
+const dueLabel = t => {
+  if(!t.due_at) return t.due_phrase && t.due_phrase !== 'Non specificata'
+    ? t.due_phrase + ' (non databile)' : 'Senza scadenza';
+  const d = new Date(t.due_at);
+  const data = d.toLocaleDateString('it-IT', {day:'2-digit', month:'2-digit', year:'numeric'});
+  if(t.due_precision === 'ora')
+    return data + ' alle ' + d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+  if(t.due_precision === 'settimana') return 'settimana del ' + data;
+  return data;
+};
+const isOverdue = t => t.due_at && t.status !== 'fatto' && new Date(t.due_at) < new Date();
+
+async function renderTaskBoard(){
+  teardownPlayer();
+  await loadTasks();
+
+  $('#detail').innerHTML = `
+    <div class="hero">
+      <div style="min-width:0">
+        <h3>Impegni</h3>
+        <div class="muted" style="margin-top:4px">
+          Gli impegni presi in riunione, con la loro scadenza vera.
+          Trascinali per riprogrammarli.
+        </div>
+      </div>
+      <div class="row">
+        <div class="seg-ctl" role="group" aria-label="Vista">
+          <button data-tview="calendario" class="${taskView==='calendario'?'on':''}"
+            ${hasCalendar()?'':'disabled title="Calendario non disponibile"'}>Calendario</button>
+          <button data-tview="elenco" class="${taskView==='elenco'?'on':''}">Elenco</button>
+        </div>
+        <button class="btn sm" id="btnNewTask">+ Task</button>
+      </div>
+    </div>
+    <div class="pane" id="panel">
+      ${!hasCalendar() ? `<div class="note warn" style="margin-top:0">
+        Vista a calendario non disponibile: FullCalendar non è stato scaricato
+        durante il build. L'elenco funziona comunque.
+        Ricostruisci l'immagine con rete attiva per abilitarlo.</div>` : ''}
+      <div id="taskBody"></div>
+    </div>`;
+
+  $$('#detail [data-tview]').forEach(b => b.onclick = () => {
+    if(b.disabled) return;
+    taskView = b.dataset.tview;
+    localStorage.setItem('timbro.taskview', taskView);
+    renderTaskBoard();
+  });
+  $('#btnNewTask').onclick = () => createTaskDialog();
+
+  if(taskView === 'calendario' && hasCalendar()) paintCalendar();
+  else paintTaskList();
+}
+
+/* ---------- Calendario ---------- */
+function paintCalendar(){
+  const host = $('#taskBody');
+  host.innerHTML = '<div id="cal"></div>';
+
+  calendar = new FullCalendar.Calendar($('#cal'), {
+    locale: 'it',
+    firstDay: 1,
+    height: 'auto',
+    initialView: 'dayGridMonth',
+    headerToolbar: {left:'prev,next oggi', center:'title', right:'dayGridMonth,dayGridWeek'},
+    buttonText: {today:'oggi', month:'Mese', week:'Settimana'},
+    customButtons: {oggi: {text:'oggi', click: () => calendar.today()}},
+    // Trascinare una voce riprogramma l'impegno: è il gesto che ci si aspetta
+    // da un calendario, e risparmia di aprire il pannello per una data.
+    editable: true,
+    eventStartEditable: true,
+    dayMaxEvents: 4,
+    moreLinkContent: n => `+${n.num}`,
+    events: TASKS.filter(t => t.due_at).map(t => ({
+      id: t.id,
+      title: t.title,
+      start: t.due_at,
+      allDay: t.due_precision !== 'ora',
+      extendedProps: {task: t},
+    })),
+    eventContent: arg => {
+      const t = arg.event.extendedProps.task;
+      const el = document.createElement('div');
+      el.className = `tev ${apPriority(t.priority)} ${t.status === 'fatto' ? 'fatto' : ''}`;
+      el.innerHTML = `${t.status === 'fatto' ? '✓ ' : ''}
+        <span class="tt">${esc(t.title)}</span>
+        ${t.owner ? `<span class="who">${esc(t.owner.split(' ')[0])}</span>` : ''}`;
+      return {domNodes: [el]};
+    },
+    eventClick: info => showTask(info.event.id),
+    eventDrop: async info => {
+      const t = info.event.extendedProps.task;
+      const nuovo = info.event.start;
+      // Trascinando si cambia il giorno, non l'ora: se l'ora era nota va
+      // conservata, altrimenti un impegno "alle 15" diventerebbe di notte.
+      if(t.due_precision === 'ora' && info.event.allDay === false){
+        // FullCalendar mantiene già l'ora quando l'evento non è allDay.
+      }else if(t.due_precision === 'ora'){
+        const vecchio = new Date(t.due_at);
+        nuovo.setHours(vecchio.getHours(), vecchio.getMinutes());
+      }
+      try{
+        await api('/tasks/' + t.id, {method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({due_at: localIso(nuovo), reason: 'spostato dal calendario'})});
+        toast('ok','Scadenza aggiornata.');
+        await loadTasks();
+      }catch(e){ toast('err', esc(e.message)); info.revert(); }
+    },
+  });
+  calendar.render();
+
+  const senza = TASKS.filter(t => !t.due_at && t.status !== 'fatto');
+  if(senza.length){
+    host.insertAdjacentHTML('beforeend', `
+      <h3 class="sec" style="margin-top:26px">Senza scadenza
+        <span class="tag">${senza.length}</span><span class="line"></span></h3>
+      <div class="muted" style="margin-bottom:11px">
+        Nessuna data è stata detta in riunione, oppure non era databile.
+        Aprili per assegnarne una.</div>
+      ${senza.map(taskRow).join('')}`);
+    bindTaskRows(host);
+  }
+}
+
+/* Data locale in ISO senza fuso: `toISOString` converte in UTC e a fine
+   giornata sposta il task al giorno prima. */
+function localIso(d){
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}` +
+         `T${p(d.getHours())}:${p(d.getMinutes())}:00`;
+}
+
+/* ---------- Elenco ---------- */
+const taskRow = t => `
+  <div class="aprow ${apPriority(t.priority)} ${t.status==='fatto'?'done':''}"
+       data-task="${t.id}" style="cursor:pointer">
+    <input type="checkbox" ${t.status==='fatto'?'checked':''} data-toggle="${t.id}"
+           aria-label="Segna come fatto">
+    <div>
+      <div class="task">${esc(t.title)}</div>
+      <div class="from">
+        <span class="st-chip st-${t.status}">${ST_LABEL[t.status]||t.status}</span>
+        ${t.owner ? ' · ' + esc(t.owner) : ' · non assegnato'}
+        ${t.job_title ? ' · da ' + esc(t.job_title) : ''}
+        ${t.comments ? ` · 💬 ${t.comments}` : ''}
+      </div>
+    </div>
+    <div class="when ${isOverdue(t)?'overdue':''}">${esc(dueLabel(t))}</div>
+  </div>`;
+
+function paintTaskList(){
+  const host = $('#taskBody');
+  const aperti = TASKS.filter(t => t.status !== 'fatto');
+  const fatti = TASKS.filter(t => t.status === 'fatto');
+
+  if(!TASKS.length){
+    host.innerHTML = `<div class="empty"><div class="ic" aria-hidden="true">✅</div>
+      <div class="h">Nessun impegno</div>
+      <div class="muted">I task nascono dagli action point dei verbali.</div></div>`;
+    return;
+  }
+
+  // Raggruppamento per orizzonte temporale: è il modo in cui si guarda una
+  // lista di impegni, molto più che per persona.
+  const oggi = new Date(); oggi.setHours(23,59,59,999);
+  const settimana = new Date(oggi); settimana.setDate(settimana.getDate()+7);
+  const gruppi = {'In ritardo':[], 'Oggi':[], 'Questa settimana':[],
+                  'Più avanti':[], 'Senza scadenza':[]};
+  for(const t of aperti){
+    if(!t.due_at) gruppi['Senza scadenza'].push(t);
+    else{
+      const d = new Date(t.due_at);
+      if(d < new Date()) gruppi['In ritardo'].push(t);
+      else if(d <= oggi) gruppi['Oggi'].push(t);
+      else if(d <= settimana) gruppi['Questa settimana'].push(t);
+      else gruppi['Più avanti'].push(t);
+    }
+  }
+
+  host.innerHTML = Object.entries(gruppi)
+    .filter(([, list]) => list.length)
+    .map(([nome, list]) => `<div class="apgroup">
+      <h4>${nome} <span class="tag ${nome==='In ritardo'?'e':''}">${list.length}</span></h4>
+      ${list.map(taskRow).join('')}</div>`).join('')
+    + (fatti.length ? `<details class="opts" style="margin-top:18px">
+        <summary>Completati (${fatti.length})</summary>
+        <div class="inner">${fatti.map(taskRow).join('')}</div></details>` : '');
+
+  bindTaskRows(host);
+}
+
+function bindTaskRows(host){
+  host.querySelectorAll('[data-task]').forEach(row => row.onclick = e => {
+    if(e.target.dataset.toggle) return;
+    showTask(row.dataset.task);
+  });
+  host.querySelectorAll('[data-toggle]').forEach(box => box.onchange = async () => {
+    try{
+      await api('/tasks/' + box.dataset.toggle, {method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({status: box.checked ? 'fatto' : 'da_fare'})});
+      await loadTasks();
+      taskView === 'calendario' && hasCalendar() ? renderTaskBoard() : paintTaskList();
+    }catch(e){ toast('err', esc(e.message)); box.checked = !box.checked; }
+  });
+}
+
+/* ---------- Pannello del task ---------- */
+async function showTask(taskId){
+  const t = TASKS.find(x => x.id === taskId);
+  if(!t) return;
+  openTask = t;
+
+  let comments = [];
+  try { comments = await api('/tasks/' + taskId + '/comments'); } catch(e){}
+
+  const host = $('#taskPanelHost');
+  host.innerHTML = `
+    <div class="scrim open" id="tpScrim"></div>
+    <aside class="tpanel" role="dialog" aria-modal="true" aria-label="Dettaglio impegno">
+      <div class="top">
+        <h3 contenteditable="true" id="tpTitle">${esc(t.title)}</h3>
+        <button class="x" id="tpClose" aria-label="Chiudi">&times;</button>
+      </div>
+      <div class="body">
+        <div class="grid">
+          <label for="tpStatus">Stato</label>
+          <select id="tpStatus">${Object.entries(ST_LABEL).map(([k, v]) =>
+            `<option value="${k}"${t.status===k?' selected':''}>${v}</option>`).join('')}</select>
+
+          <label for="tpPriority">Priorità</label>
+          <select id="tpPriority">${['alta','media','bassa'].map(v =>
+            `<option value="${v}"${apPriority(t.priority)===v?' selected':''}>${v}</option>`).join('')}</select>
+
+          <label for="tpOwner">Chi</label>
+          <input type="text" id="tpOwner" value="${esc(t.owner)}" list="spkKnown"
+                 placeholder="non assegnato" autocomplete="off">
+
+          <label for="tpDue">Scadenza</label>
+          <input type="datetime-local" id="tpDue"
+                 value="${t.due_at ? t.due_at.slice(0,16) : ''}">
+        </div>
+
+        ${t.due_phrase && t.due_phrase !== 'Non specificata' ? `
+          <div class="desc" style="margin:-8px 0 16px">
+            In riunione è stato detto: «${esc(t.due_phrase)}»</div>` : ''}
+
+        ${t.job_id ? `<div class="origin">
+          <div class="k">Da dove viene</div>
+          <div>${esc(t.job_title || 'riunione')}</div>
+          <div class="row" style="margin-top:9px">
+            <button class="mini" id="tpGoto">
+              ${t.source_s != null ? '▶ Ascolta il punto (' + hms(t.source_s) + ')'
+                                   : 'Apri la riunione'}</button>
+          </div>
+        </div>` : ''}
+
+        <div class="field">
+          <label for="tpNotes">Note</label>
+          <textarea id="tpNotes" rows="3" placeholder="Appunti liberi">${esc(t.notes)}</textarea>
+        </div>
+
+        <h3 class="sec">Storico <span class="line"></span></h3>
+        <div class="thread" id="tpThread">
+          ${comments.length ? comments.map(c => `
+            <div class="cmt ${c.kind}">${esc(c.body)}
+              <div class="when">${esc(c.created_at.slice(0,16).replace('T',' '))}</div>
+            </div>`).join('')
+            : '<span class="muted">Nessun commento.</span>'}
+        </div>
+        <div class="with-btn" style="margin-top:11px">
+          <input type="text" id="tpComment" placeholder="Aggiungi un commento…"
+                 autocomplete="off">
+          <button class="btn ghost" id="tpAddComment">Invia</button>
+        </div>
+      </div>
+      <div class="foot">
+        <button class="btn" id="tpSave">Salva</button>
+        <div class="spacer"></div>
+        <button class="btn danger sm" id="tpDelete">Elimina</button>
+      </div>
+    </aside>`;
+
+  const close = () => { host.innerHTML = ''; openTask = null; };
+  $('#tpClose').onclick = close;
+  $('#tpScrim').onclick = close;
+
+  const goto = $('#tpGoto');
+  if(goto) goto.onclick = async () => {
+    close();
+    await selectJob(t.job_id);
+    if(t.source_s != null){
+      activeTab = 'trascrizione';
+      await renderDetail(t.job_id);
+      setTimeout(() => seekTo(t.source_s), 250);
+    }
+  };
+
+  $('#tpAddComment').onclick = async () => {
+    const body = $('#tpComment').value.trim();
+    if(!body) return;
+    try{
+      await api('/tasks/' + taskId + '/comments', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body: JSON.stringify({body})});
+      await loadTasks();
+      showTask(taskId);
+    }catch(e){ toast('err', esc(e.message)); }
+  };
+  $('#tpComment').onkeydown = e => {
+    if(e.key === 'Enter'){ e.preventDefault(); $('#tpAddComment').click(); }
+  };
+
+  $('#tpSave').onclick = async () => {
+    const due = $('#tpDue').value;
+    // NB: questa variabile non va chiamata come quella del salvataggio
+    // impostazioni. preflight.py individua QUEL blocco cercando la prima
+    // dichiarazione con quel nome, per verificare che i campi inviati siano
+    // accettati da SettingsPatch: un omonimo più in alto gli fa analizzare
+    // il pezzo sbagliato. Per lo stesso motivo qui il nome non si cita.
+    const changes = {
+      title: $('#tpTitle').textContent.trim(),
+      status: $('#tpStatus').value,
+      priority: $('#tpPriority').value,
+      owner: $('#tpOwner').value.trim(),
+      notes: $('#tpNotes').value,
+      due_at: due ? due + ':00' : '',
+      due_precision: due ? (due.slice(11) === '00:00' ? 'giorno' : 'ora') : '',
+    };
+    if(changes.due_at !== t.due_at){
+      const motivo = prompt('Perché è stata spostata? (facoltativo)');
+      if(motivo) changes.reason = motivo;
+    }
+    try{
+      await api('/tasks/' + taskId, {method:'PATCH',
+        headers:{'Content-Type':'application/json'}, body: JSON.stringify(changes)});
+      close();
+      toast('ok','Impegno aggiornato.');
+      renderTaskBoard();
+    }catch(e){ toast('err', esc(e.message)); }
+  };
+
+  $('#tpDelete').onclick = async () => {
+    if(!confirm('Eliminare questo impegno? Il verbale non viene modificato.')) return;
+    try{
+      await api('/tasks/' + taskId, {method:'DELETE'});
+      close();
+      toast('ok','Impegno eliminato.');
+      renderTaskBoard();
+    }catch(e){ toast('err', esc(e.message)); }
+  };
+}
+
+async function createTaskDialog(){
+  const title = prompt('Cosa va fatto?');
+  if(!title || !title.trim()) return;
+  try{
+    await api('/tasks', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({title: title.trim(), job_id: currentId})});
+    toast('ok','Impegno creato.');
+    renderTaskBoard();
+  }catch(e){ toast('err', esc(e.message)); }
+}
+
+/* ============================================================
    Impostazioni
    ============================================================ */
 let OPTIONS = null, SETTINGS = null, pullTimer = null;
@@ -2952,6 +4551,8 @@ const S = {
   llm:'#s_llm', ctx:'#s_ctx', chunk:'#s_chunk', url:'#s_url', timeout:'#s_timeout',
   keep:'#s_keep',
   maxmb:'#s_maxmb', delaudio:'#s_delaudio', hf:'#s_hf', pull:'#s_pull',
+  spkwords:'#s_spkwords', spksec:'#s_spksec', fillnear:'#s_fillnear',
+  semantic:'#s_semantic', embed:'#s_embed',
 };
 const opt = (v,l,sel) => `<option value="${esc(v)}"${sel?' selected':''}>${esc(l)}</option>`;
 
@@ -2999,6 +4600,11 @@ function fillForm(){
   $(S.maxmb).value = s.max_upload_mb;
   $(S.multi).checked = s.multilingual;      $(S.prep).checked = s.audio_preprocess;
   $(S.autoctx).checked = s.auto_context;    $(S.delaudio).checked = s.delete_audio_after;
+  $(S.spkwords).value = s.speaker_change_min_words;
+  $(S.spksec).value = s.speaker_change_min_s;
+  $(S.fillnear).checked = s.diarization_fill_nearest;
+  $(S.semantic).checked = s.semantic_search;
+  $(S.embed).value = s.embed_model;
   $(S.hf).value = '';
   $(S.hf).placeholder = s.hf_token_set ? s.hf_token_preview + '  (vuoto = invariato)' : 'hf_...';
   $('#hfBadge').innerHTML = s.hf_token_set
@@ -3143,6 +4749,23 @@ async function pollPull(){
   }
 }
 
+$('#btnReindex').onclick = async () => {
+  const btn = $('#btnReindex'); btn.disabled = true;
+  note('#reindexResult','warn',
+    '<span class="spin"></span> Ricostruzione in corso. Su molte riunioni ' +
+    'può richiedere qualche minuto…');
+  try{
+    const r = await api('/search/reindex', {method:'POST'});
+    note('#reindexResult', r.embed_error ? 'warn' : 'ok',
+      `${r.jobs} riunioni indicizzate, ${r.vectors} brani vettorializzati.` +
+      (r.embed_error
+        ? `<br>Ricerca per significato non attiva: ${esc(r.embed_error)}`
+        : ''));
+    toast('ok','Indice ricostruito.');
+  }catch(e){ note('#reindexResult','err', esc(e.message)); }
+  btn.disabled = false;
+};
+
 $('#btnSaveSettings').onclick = async () => {
   const btn = $('#btnSaveSettings');
   const patch = {
@@ -3153,6 +4776,11 @@ $('#btnSaveSettings').onclick = async () => {
     vad_onset: Number($(S.vadon).value), vad_offset: Number($(S.vadoff).value),
     multilingual: $(S.multi).checked, audio_preprocess: $(S.prep).checked,
     auto_context: $(S.autoctx).checked,
+    speaker_change_min_words: Number($(S.spkwords).value),
+    speaker_change_min_s: Number($(S.spksec).value),
+    diarization_fill_nearest: $(S.fillnear).checked,
+    semantic_search: $(S.semantic).checked,
+    embed_model: $(S.embed).value.trim(),
     ollama_model: $(S.llm).value, ollama_base_url: $(S.url).value.trim(),
     ollama_num_ctx: Number($(S.ctx).value), ollama_timeout_s: Number($(S.timeout).value),
     ollama_keep_alive: $(S.keep).value,
@@ -3180,7 +4808,7 @@ $('#btnSaveSettings').onclick = async () => {
    ============================================================ */
 loadHealth();
 loadVram();
-loadJobs();
+loadJobs().then(() => { loadLibrary(); loadTasks(); });
 setInterval(loadHealth, 30000);
 </script>
 </body>

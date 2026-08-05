@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import gc
 import inspect
+import json
 import logging
 import shutil
 import subprocess
 import tempfile
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -286,12 +288,21 @@ def diarize(
         log.error("Diarizzazione senza segmenti: probabile licenza non accettata")
         return result, report
 
-    # fill_nearest: le parole a cavallo fra due turni restano comunque etichettate
-    result = assign_word_speakers(diarize_segments, result, fill_nearest=True)
+    # `fill_nearest` etichetta anche le parole per cui la diarizzazione non ha
+    # evidenza: copre tutto ma inventa, ed è la causa principale dei falsi
+    # cambi di parlante. Predefinito: spento.
+    result = assign_word_speakers(
+        diarize_segments, result, fill_nearest=settings.diarization_fill_nearest
+    )
 
     # Gli scambi rapidi finirebbero attribuiti a una sola persona: le etichette
-    # per-parola sono più precise di quella per-segmento.
-    result["segments"] = overlap.split_on_speaker_change(result.get("segments", []))
+    # per-parola sono più precise di quella per-segmento. La soglia evita che
+    # una singola parola mal etichettata generi un turno inesistente.
+    result["segments"] = overlap.split_on_speaker_change(
+        result.get("segments", []),
+        min_words=settings.speaker_change_min_words,
+        min_seconds=settings.speaker_change_min_s,
+    )
 
     speakers = {
         seg.get("speaker")
@@ -349,6 +360,45 @@ def _explain(exc: Exception) -> str:
 # ---------------------------------------------------------------------------
 # Trascrizione completa
 # ---------------------------------------------------------------------------
+def probe_recorded_at(source: Path) -> str:
+    """Quando la riunione è stata REGISTRATA, non quando è stata caricata.
+
+    Senza questo dato «entro domattina» non è risolvibile: se carichi lunedì
+    una registrazione di venerdì, «domani» cade sul giorno sbagliato.
+
+    Tre fonti in ordine di attendibilità: i metadati del contenitore (i
+    telefoni scrivono `creation_time` quasi sempre), la data di modifica del
+    file, e in ultimo nulla — il chiamante ripiegherà sul caricamento.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json",
+             "-show_entries", "format_tags=creation_time:format=duration",
+             str(source)],
+            capture_output=True, text=True, timeout=30,
+        )
+        tags = (json.loads(out.stdout or "{}").get("format") or {}).get("tags") or {}
+        raw = tags.get("creation_time") or tags.get("com.apple.quicktime.creationdate")
+        if raw:
+            # ffprobe restituisce UTC con la Z finale; datetime la accetta
+            # solo dalla 3.11, e comunque qui serve l'ora locale della riunione.
+            cleaned = raw.replace("Z", "+00:00")
+            moment = datetime.fromisoformat(cleaned)
+            if moment.tzinfo is not None:
+                moment = moment.astimezone().replace(tzinfo=None)
+            log.info("Data di registrazione dai metadati: %s", moment.isoformat())
+            return moment.isoformat(timespec="seconds")
+    except Exception as exc:
+        log.debug("Metadati temporali non leggibili da %s: %s", source.name, exc)
+
+    try:
+        moment = datetime.fromtimestamp(source.stat().st_mtime)
+        log.info("Data di registrazione dalla data del file: %s", moment.isoformat())
+        return moment.isoformat(timespec="seconds")
+    except Exception:
+        return ""
+
+
 def preprocess_audio(source: Path) -> tuple[Path, str | None]:
     """Passa-alto, riduzione rumore e normalizzazione del volume via ffmpeg.
 
@@ -591,11 +641,19 @@ def _run(
                 notices.append(sep_notice)
 
     if overlaps:
-        # Senza separazione, un tratto sovrapposto produce una riga per voce
-        # con lo stesso testo: si sa chi c'era, ma il testo resta quello che
-        # Whisper è riuscito a sentire.
-        if not stats.get("separated"):
-            segments = overlap.annotate(segments, overlaps, duplicate=True)
+        # I segmenti vanno SEMPRE marcati: è il campo `overlap` a dire
+        # all'interfaccia dove più voci parlavano insieme. Prima, quando la
+        # separazione riusciva, questa riga veniva saltata del tutto e nessun
+        # segmento riceveva la marcatura: la trascrizione tornava a mostrare
+        # gli interventi come se fossero stati detti uno dopo l'altro.
+        #
+        # Cambia solo la duplicazione. Senza separazione un tratto sovrapposto
+        # produce una riga per voce con lo stesso testo: si sa chi c'era, ma il
+        # testo resta quello che Whisper è riuscito a sentire. Con le tracce
+        # separate ogni voce ha già il proprio testo, quindi si marca soltanto.
+        segments = overlap.annotate(
+            segments, overlaps, duplicate=not stats.get("separated")
+        )
         diarization["overlap_stats"] = stats
 
     # Il merge di segmenti consecutivi ha senso solo se sappiamo che appartengono
@@ -650,19 +708,38 @@ def _transcribe_separated(
             log.warning("Traccia %s non trascritta: %s", source["speaker"], exc)
             continue
 
-        for seg in res.get("segments", []):
+        # Allineamento anche qui. Senza, i segmenti della traccia separata non
+        # hanno i tempi di parola, quindi non si possono tagliare sui confini
+        # delle sovrapposizioni: restano interi anche di trenta secondi e
+        # diventano inutilizzabili — o si scartano (e la separazione non serve
+        # a niente) o si inseriscono interi (e duplicano la miscela).
+        aligned = res.get("segments", [])
+        try:
+            align_model, metadata = _cache.align(settings.language or "it", device)
+            aligned = whisperx.align(
+                aligned, align_model, metadata, audio, device,
+                return_char_alignments=False,
+            ).get("segments", aligned)
+        except Exception as exc:
+            log.warning(
+                "Traccia %s non allineata (%s): resterà tagliabile solo per segmento",
+                source["speaker"], exc,
+            )
+
+        for seg in aligned:
             text = (seg.get("text") or "").strip()
             if not text:
                 continue
-            out.append(
-                {
-                    "start": float(seg.get("start") or 0.0),
-                    "end": float(seg.get("end") or 0.0),
-                    "speaker": source["speaker"],
-                    "text": text,
-                    "separated": True,
-                }
-            )
+            entry = {
+                "start": float(seg.get("start") or 0.0),
+                "end": float(seg.get("end") or 0.0),
+                "speaker": source["speaker"],
+                "text": text,
+                "separated": True,
+            }
+            if seg.get("words"):
+                entry["words"] = seg["words"]
+            out.append(entry)
         # Le tracce separate pesano quanto l'originale: via appena usate.
         path.unlink(missing_ok=True)
 
@@ -683,26 +760,93 @@ def _merge_separated(
     Fuori dalle sovrapposizioni la trascrizione della miscela è migliore: la
     separazione introduce artefatti che non servono dove c'è una voce sola.
     Quindi teniamo l'originale e rimpiazziamo solo dove serve davvero.
-    """
-    def overlapping(start: float, end: float) -> bool:
-        return any(o["start"] < end and o["end"] > start for o in overlaps)
 
-    kept = [s for s in base if not overlapping(s.get("start", 0.0), s.get("end", 0.0))]
-    replaced = [
-        s for s in separated if overlapping(s.get("start", 0.0), s.get("end", 0.0))
-    ]
+    Il "dove" va inteso alla lettera. La versione precedente decideva per
+    segmento intero con un test di semplice contatto: un segmento di venti
+    secondi che sfiorava per mezzo secondo una sovrapposizione veniva scartato
+    tutto dalla base e reintrodotto tutto dalle tracce separate. Poiché i due
+    insiemi hanno confini diversi, lo stesso parlato finiva due volte
+    nell'elenco, con orari leggermente diversi e testo quasi identico: da qui
+    le frasi ripetute. Su una riunione di prova erano 167 secondi coperti due
+    volte su 679, un quarto del totale.
+
+    Ora si taglia prima sui confini delle sovrapposizioni, poi ogni pezzo va
+    da una parte sola — con una regola che rende impossibile perdere parlato:
+
+    **un pezzo della base si scarta solo se qualcosa lo sostituisce davvero.**
+
+    Serve perché le tracce separate non passano dall'allineamento e quindi non
+    hanno i tempi di parola: non si possono tagliare, restano interi anche di
+    trenta secondi, e non coprono ordinatamente le finestre di sovrapposizione.
+    Scartare la base "perché lì ci pensano le tracce separate" senza verificare
+    che sia vero lascia buchi di silenzio nella trascrizione — che è l'errore
+    peggiore dei tre possibili: una ripetizione si legge, un buco no.
+    """
+    spans = overlap.overlap_spans(overlaps)
+    base_pieces = overlap.split_at_boundaries(base, overlaps)
+    sep_pieces = overlap.split_at_boundaries(separated, overlaps)
+
+    # Dalle tracce separate si prende ciò che sta davvero dentro una
+    # sovrapposizione, non ciò che la sfiora.
+    replaced = [s for s in sep_pieces if overlap.fraction_inside(s, spans) >= 0.5]
+    taken = overlap.merge_spans(
+        [(s.get("start", 0.0), s.get("end", 0.0)) for s in replaced]
+    )
+
+    kept = []
+    for piece in base_pieces:
+        in_overlap = overlap.fraction_inside(piece, spans) >= 0.5
+        # `taken` è ciò che le tracce separate coprono per davvero: se quel
+        # tratto non è coperto, la base resta dov'è.
+        substituted = overlap.fraction_inside(piece, taken) >= 0.5
+        if not (in_overlap and substituted):
+            kept.append(piece)
+
+    result = sorted(kept + replaced, key=lambda s: (s.get("start", 0.0), s.get("speaker", "")))
+
+    # Invariante esplicito: la fusione non può ridurre l'audio coperto da
+    # testo. Se accade è un difetto, e va scritto nei log invece di arrivare
+    # all'utente come una trascrizione che salta pezzi.
+    before = overlap.covered_seconds([(s.get("start", 0.0), s.get("end", 0.0)) for s in base])
+    after = overlap.covered_seconds([(s.get("start", 0.0), s.get("end", 0.0)) for s in result])
+    # La soglia è proporzionale, non assoluta: tagliare sui confini di parola
+    # costa qualche decimo di secondo per ogni confine, ed è normale. Quello
+    # che va intercettato è il crollo — sul caso che ha prodotto questo
+    # controllo la copertura era scesa del 36%.
+    if after < before * 0.95 - 1.0:
+        log.error(
+            "Fusione delle tracce separate: copertura scesa da %.1fs a %.1fs "
+            "(-%.0f%%). Tengo la trascrizione della miscela e uso le tracce "
+            "separate solo in aggiunta: meglio qualche ripetizione che un buco.",
+            before, after, (1 - after / before) * 100 if before else 0,
+        )
+        # Ripiego prudente: meglio qualche ripetizione che un buco.
+        result = sorted(
+            base_pieces + replaced,
+            key=lambda s: (s.get("start", 0.0), s.get("speaker", "")),
+        )
 
     log.info(
-        "Merge: %s segmenti puliti conservati, %s sostituiti dalle tracce separate",
-        len(kept), len(replaced),
+        "Fusione: %s pezzi dalla miscela, %s dalle tracce separate "
+        "(base %s->%s, separate %s->%s) · copertura %.1fs -> %.1fs",
+        len(kept), len(replaced), len(base), len(base_pieces),
+        len(separated), len(sep_pieces), before, after,
     )
-    return sorted(kept + replaced, key=lambda s: (s.get("start", 0.0), s.get("speaker", "")))
+    return result
 
 
 def normalize_segments(
     raw_segments: list[dict[str, Any]], merge: bool = True
 ) -> list[dict[str, Any]]:
-    """Pulisce i segmenti e, se richiesto, fonde quelli contigui della stessa voce."""
+    """Pulisce i segmenti e, se richiesto, fonde quelli contigui della stessa voce.
+
+    Questa funzione ricostruisce ogni segmento campo per campo, quindi tutto
+    ciò che non viene copiato esplicitamente qui sparisce prima del
+    salvataggio. Vale in particolare per `words`: i tempi di parola sono
+    prodotti dall'allineamento, usati per decidere i cambi di voce, e poi
+    andavano perduti — l'interfaccia non poteva illuminare il parlato parola
+    per parola perché il dato non arrivava mai al database.
+    """
     cleaned: list[dict[str, Any]] = []
     for seg in raw_segments:
         text = (seg.get("text") or "").strip()
@@ -719,6 +863,25 @@ def normalize_segments(
             entry["overlap"] = list(seg["overlap"])
         if seg.get("separated"):
             entry["separated"] = True
+        if seg.get("overlap_primary") is not None:
+            entry["overlap_primary"] = bool(seg["overlap_primary"])
+
+        # Solo le parole utili: quelle senza testo non servono a nessuno, e
+        # senza istanti non sono illuminabili. Si tengono i quattro campi che
+        # servono, non l'intero oggetto di WhisperX (che porta anche i
+        # punteggi di allineamento, inutili qui e pesanti da trasferire).
+        words = [
+            {
+                "word": (w.get("word") or "").strip(),
+                "start": w.get("start"),
+                "end": w.get("end"),
+                "speaker": w.get("speaker"),
+            }
+            for w in (seg.get("words") or [])
+            if (w.get("word") or "").strip()
+        ]
+        if words:
+            entry["words"] = words
         cleaned.append(entry)
 
     if not merge:
@@ -740,6 +903,11 @@ def normalize_segments(
         if contiguous:
             prev["text"] = f"{prev['text']} {seg['text']}".strip()
             prev["end"] = seg["end"]
+            # I tempi di parola vanno uniti insieme al testo: fondere le frasi
+            # e lasciare indietro le parole produrrebbe un segmento in cui
+            # l'evidenziazione si ferma a metà.
+            if seg.get("words"):
+                prev["words"] = (prev.get("words") or []) + seg["words"]
         else:
             merged.append(seg)
     return merged

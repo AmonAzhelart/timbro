@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         libsndfile1 \
         git \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -26,6 +27,25 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY backend/tools ./tools
 COPY frontend ./frontend
+
+# FullCalendar per la vista a calendario dei task. Viene scaricato qui e
+# servito da noi: a runtime l'applicazione resta completamente locale, che è
+# il punto di questo progetto — una CDN nel tag <script> significherebbe
+# calendario rotto senza rete.
+#
+# Il download NON blocca il build: se fallisce, l'interfaccia se ne accorge e
+# ripiega sulla vista a elenco, che resta comunque completa. Preferisco un
+# calendario mancante a un'immagine che non si costruisce.
+ARG FULLCALENDAR_VERSION=6.1.15
+RUN mkdir -p frontend/vendor && \
+    (curl -fsSL --retry 3 --max-time 60 \
+        "https://cdn.jsdelivr.net/npm/fullcalendar@${FULLCALENDAR_VERSION}/index.global.min.js" \
+        -o frontend/vendor/fullcalendar.js \
+     || curl -fsSL --retry 3 --max-time 60 \
+        "https://cdn.jsdelivr.net/npm/fullcalendar@${FULLCALENDAR_VERSION}/dist/index.global.min.js" \
+        -o frontend/vendor/fullcalendar.js \
+     || echo "FullCalendar non scaricato: la vista a calendario ripiegherà sull'elenco.") && \
+    ls -l frontend/vendor/ || true
 
 # Controlli statici su rotte, import e coerenza con la UI: se qualcosa è
 # malformato la build fallisce subito, invece di lasciare il container in

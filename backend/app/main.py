@@ -6,14 +6,17 @@ import logging
 import mimetypes
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Response, UploadFile
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from . import (
+    dates,
     export,
     gpu,
     hf,
@@ -25,19 +28,36 @@ from . import (
     summarize,
     transcribe,
 )
+from . import tasks as tasks_mod
 from .config import settings
 from .models import (
     AppSettings,
+    Folder,
+    FolderPatch,
+    FolderRequest,
+    Glossary,
     JobDetail,
+    JobFiling,
     JobOptions,
     JobStatus,
     JobSummary,
+    KnownSpeaker,
     MeetingAnalysis,
+    OpenActionPoint,
     PullRequest,
+    RecordedAtRequest,
     RenameRequest,
     RetranscribeRequest,
+    SearchHit,
+    SearchResponse,
     SettingsOptions,
     SettingsPatch,
+    Tag,
+    TagRequest,
+    Task,
+    TaskComment,
+    TaskCreate,
+    TaskPatch,
 )
 
 logging.basicConfig(
@@ -74,6 +94,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Timbro", version="1.0.0", lifespan=lifespan)
+
+# Con i tempi per parola il dettaglio di una riunione lunga passa da qualche
+# centinaio di kB a qualche MB, ed è JSON: si comprime di circa dieci volte.
+# `minimum_size` evita di pagare la compressione sulle risposte piccole, che
+# sono la maggior parte (stato, avanzamento, impostazioni).
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 # ---------------------------------------------------------------------------
@@ -452,6 +478,7 @@ def rename_speakers(job_id: str, payload: RenameRequest) -> JobDetail:
 
     names = {k: v.strip() for k, v in payload.speaker_names.items() if v.strip()}
     store.update_job(job_id, speaker_names=names)
+    store.remember_speakers(list(names.values()))
 
     if payload.regenerate and job.segments:
         try:
@@ -481,9 +508,268 @@ def edit_analysis(job_id: str, payload: MeetingAnalysis) -> JobDetail:
         raise HTTPException(409, "Job ancora in elaborazione")
 
     store.update_job(job_id, analysis=payload.model_dump())
+    # L'indice segue il verbale: senza, la ricerca continuerebbe a restituire
+    # il testo vecchio, che è peggio di non trovare nulla.
+    store.reindex_job(job_id)
     updated = store.get_job(job_id)
     assert updated is not None
     return updated
+
+
+# ---------------------------------------------------------------------------
+# Archivio: cartelle, etichette, collocazione
+# ---------------------------------------------------------------------------
+@app.get("/api/folders", response_model=list[Folder])
+def folders() -> list[Folder]:
+    return [Folder.model_validate(f) for f in store.list_folders()]
+
+
+@app.post("/api/folders", response_model=Folder, status_code=201)
+def add_folder(payload: FolderRequest) -> Folder:
+    if payload.parent_id and not any(
+        f["id"] == payload.parent_id for f in store.list_folders()
+    ):
+        raise HTTPException(404, "Cartella superiore non trovata")
+    return Folder.model_validate(
+        store.create_folder(payload.name, payload.parent_id, payload.color)
+    )
+
+
+@app.patch("/api/folders/{folder_id}", response_model=list[Folder])
+def edit_folder(folder_id: str, payload: FolderPatch) -> list[Folder]:
+    error = store.update_folder(
+        folder_id, name=payload.name, parent_id=payload.parent_id,
+        color=payload.color, move=payload.move,
+    )
+    if error:
+        raise HTTPException(400, error)
+    return [Folder.model_validate(f) for f in store.list_folders()]
+
+
+@app.delete("/api/folders/{folder_id}", status_code=204, response_model=None)
+def remove_folder(folder_id: str):
+    """Elimina la cartella e le sue sottocartelle; le riunioni tornano alla radice."""
+    if not store.delete_folder(folder_id):
+        raise HTTPException(404, "Cartella non trovata")
+    return Response(status_code=204)
+
+
+@app.get("/api/tags", response_model=list[Tag])
+def tags() -> list[Tag]:
+    return [Tag.model_validate(t) for t in store.list_tags()]
+
+
+@app.post("/api/tags", response_model=Tag, status_code=201)
+def add_tag(payload: TagRequest) -> Tag:
+    return Tag.model_validate({**store.ensure_tag(payload.name, payload.color), "jobs": 0})
+
+
+@app.delete("/api/tags/{tag_id}", status_code=204, response_model=None)
+def remove_tag(tag_id: str):
+    if not store.delete_tag(tag_id):
+        raise HTTPException(404, "Etichetta non trovata")
+    return Response(status_code=204)
+
+
+@app.post("/api/jobs/{job_id}/recorded-at", response_model=JobDetail)
+def set_recorded_at(job_id: str, payload: RecordedAtRequest) -> JobDetail:
+    """Corregge la data della riunione e ricalcola le scadenze.
+
+    La data viene dedotta dai metadati dell'audio, che però non sempre ci
+    sono e non sempre sono giusti. Correggendola qui, «entro domattina» si
+    sposta sul giorno corretto senza dover ri-trascrivere nulla.
+    """
+    job = store.get_job(job_id)
+    if job is None:
+        raise HTTPException(404, "Job non trovato")
+    try:
+        moment = datetime.fromisoformat(payload.recorded_at)
+    except ValueError as exc:
+        raise HTTPException(422, "Data non valida: usa il formato AAAA-MM-GGTHH:MM") from exc
+
+    store.update_job(job_id, recorded_at=moment.isoformat(timespec="seconds"))
+
+    if job.analysis:
+        updated_analysis = summarize.resolve_due_dates(job.analysis, moment.isoformat())
+        store.update_job(job_id, analysis=updated_analysis.model_dump())
+        store.reindex_job(job_id, with_vectors=False)
+
+    updated = store.get_job(job_id)
+    assert updated is not None
+    return updated
+
+
+@app.post("/api/jobs/{job_id}/filing", response_model=JobDetail)
+def file_job(job_id: str, payload: JobFiling) -> JobDetail:
+    """Sposta una riunione in una cartella e ne aggiorna le etichette."""
+    if store.get_job(job_id) is None:
+        raise HTTPException(404, "Job non trovato")
+    if payload.move:
+        store.set_job_folder(job_id, payload.folder_id)
+    if payload.tags is not None:
+        store.set_job_tags(job_id, payload.tags)
+    updated = store.get_job(job_id)
+    assert updated is not None
+    return updated
+
+
+# ---------------------------------------------------------------------------
+# Ricerca su tutto l'archivio
+# ---------------------------------------------------------------------------
+@app.get("/api/search", response_model=SearchResponse)
+def search_archive(q: str = "", limit: int = 40, kinds: str = "") -> SearchResponse:
+    wanted = [k for k in kinds.split(",") if k.strip()] or None
+    result = store.search_archive(q, limit=max(1, min(limit, 100)), kinds=wanted)
+    return SearchResponse(
+        hits=[SearchHit.model_validate(h) for h in result["hits"]],
+        semantic=result["semantic"],
+        note=result["note"],
+    )
+
+
+@app.post("/api/search/reindex")
+def rebuild_index(vectors: bool = True) -> dict:
+    """Ricostruisce l'indice su tutte le riunioni già elaborate.
+
+    Non è automatico all'avvio: su un archivio grande sarebbe un costo a
+    sorpresa a ogni riavvio del container.
+    """
+    return store.reindex_all(with_vectors=vectors)
+
+
+# ---------------------------------------------------------------------------
+# Impegni, glossari, rubrica delle voci
+# ---------------------------------------------------------------------------
+@app.get("/api/action-points", response_model=list[OpenActionPoint])
+def action_points(include_done: bool = False) -> list[OpenActionPoint]:
+    return [OpenActionPoint.model_validate(p) for p in store.all_action_points(include_done)]
+
+
+@app.post("/api/jobs/{job_id}/action-points/{index}")
+def toggle_action_point(job_id: str, index: int, done: bool = True) -> dict:
+    if not store.set_action_done(job_id, index, done):
+        raise HTTPException(404, "Action point non trovato")
+    store.reindex_job(job_id, with_vectors=False)
+    return {"ok": True, "done": done}
+
+
+# ---------------------------------------------------------------------------
+# Task
+# ---------------------------------------------------------------------------
+@app.get("/api/tasks", response_model=list[Task])
+def tasks(include_done: bool = True) -> list[Task]:
+    return [Task.model_validate(t) for t in store.list_tasks(include_done)]
+
+
+@app.post("/api/tasks", response_model=Task, status_code=201)
+def add_task(payload: TaskCreate) -> Task:
+    data = payload.model_dump()
+    if data["status"] not in tasks_mod.STATI:
+        raise HTTPException(422, f"Stato non valido: {data['status']}")
+    created = store.create_task(data)
+    return Task.model_validate(created)
+
+
+@app.patch("/api/tasks/{task_id}", response_model=Task)
+def edit_task(task_id: str, payload: TaskPatch) -> Task:
+    before = store.get_task(task_id)
+    if before is None:
+        raise HTTPException(404, "Task non trovato")
+
+    fields = payload.model_dump(exclude_unset=True)
+    reason = fields.pop("reason", None)
+    if fields.get("status") and fields["status"] not in tasks_mod.STATI:
+        raise HTTPException(422, f"Stato non valido: {fields['status']}")
+
+    updated = store.update_task(task_id, fields)
+    if updated is None:
+        raise HTTPException(404, "Task non trovato")
+
+    # Uno spostamento di scadenza e un cambio di stato finiscono nello storico
+    # da soli: ricostruire fra un mese "quando è slittato e perché" senza
+    # traccia automatica è impossibile, e nessuno annota a mano.
+    if "due_at" in fields and fields["due_at"] != before["due_at"]:
+        prima = dates.describe(before["due_at"], before["due_precision"])
+        dopo = dates.describe(updated["due_at"], updated["due_precision"])
+        store.add_comment(
+            task_id,
+            f"Scadenza spostata da {prima} a {dopo}" + (f" — {reason}" if reason else ""),
+            kind="sistema",
+        )
+    elif "status" in fields and fields["status"] != before["status"]:
+        etichetta = tasks_mod.STATI_LABEL.get(fields["status"], fields["status"])
+        store.add_comment(
+            task_id,
+            f"Stato: {etichetta}" + (f" — {reason}" if reason else ""),
+            kind="sistema",
+        )
+    elif reason:
+        store.add_comment(task_id, reason, kind="commento")
+
+    return Task.model_validate({**updated, "comments": len(store.task_comments(task_id))})
+
+
+@app.delete("/api/tasks/{task_id}", status_code=204, response_model=None)
+def remove_task(task_id: str):
+    if not store.delete_task(task_id):
+        raise HTTPException(404, "Task non trovato")
+    return Response(status_code=204)
+
+
+@app.get("/api/tasks/{task_id}/comments", response_model=list[TaskComment])
+def comments(task_id: str) -> list[TaskComment]:
+    if store.get_task(task_id) is None:
+        raise HTTPException(404, "Task non trovato")
+    return [TaskComment.model_validate(c) for c in store.task_comments(task_id)]
+
+
+@app.post("/api/tasks/{task_id}/comments", response_model=TaskComment, status_code=201)
+def add_task_comment(task_id: str, payload: TaskComment) -> TaskComment:
+    if store.get_task(task_id) is None:
+        raise HTTPException(404, "Task non trovato")
+    return TaskComment.model_validate(store.add_comment(task_id, payload.body))
+
+
+@app.post("/api/jobs/{job_id}/tasks")
+def sync_tasks(job_id: str) -> dict:
+    """Crea i task mancanti dagli action point di questa riunione."""
+    if store.get_job(job_id) is None:
+        raise HTTPException(404, "Job non trovato")
+    return {"created": store.sync_tasks_from_job(job_id)}
+
+
+@app.get("/api/glossaries", response_model=list[Glossary])
+def glossaries() -> list[Glossary]:
+    return [Glossary.model_validate(g) for g in store.list_glossaries()]
+
+
+@app.post("/api/glossaries", response_model=Glossary)
+def save_glossary(payload: Glossary) -> Glossary:
+    return Glossary.model_validate(
+        store.save_glossary(
+            payload.name, payload.prompt, payload.hotwords,
+            payload.folder_id, payload.id or None,
+        )
+    )
+
+
+@app.delete("/api/glossaries/{glossary_id}", status_code=204, response_model=None)
+def remove_glossary(glossary_id: str):
+    if not store.delete_glossary(glossary_id):
+        raise HTTPException(404, "Glossario non trovato")
+    return Response(status_code=204)
+
+
+@app.get("/api/speakers", response_model=list[KnownSpeaker])
+def speakers() -> list[KnownSpeaker]:
+    return [KnownSpeaker.model_validate(s) for s in store.known_speakers()]
+
+
+@app.delete("/api/speakers/{name}", status_code=204, response_model=None)
+def remove_speaker(name: str):
+    if not store.forget_speaker(name):
+        raise HTTPException(404, "Nome non trovato")
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
@@ -559,4 +845,11 @@ def index() -> HTMLResponse:
     index_file = FRONTEND_DIR / "index.html"
     if not index_file.exists():
         return HTMLResponse("<h1>Timbro</h1><p>Frontend non trovato. API su /docs</p>")
-    return HTMLResponse(index_file.read_text(encoding="utf-8"))
+    return HTMLResponse(
+        index_file.read_text(encoding="utf-8"),
+        # L'interfaccia è un file solo che cambia a ogni rilascio: senza questa
+        # intestazione il browser può servire la copia in cache anche dopo un
+        # rebuild, e si finisce a cercare nel container un problema che sta nel
+        # browser. Costa una richiesta da poche decine di kB.
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )

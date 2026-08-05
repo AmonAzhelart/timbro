@@ -43,6 +43,11 @@ EDITABLE: tuple[str, ...] = (
     "multilingual",
     "audio_preprocess",
     "auto_context",
+    "diarization_fill_nearest",
+    "speaker_change_min_words",
+    "speaker_change_min_s",
+    "semantic_search",
+    "embed_model",
     "ollama_base_url",
     "ollama_model",
     "ollama_num_ctx",
@@ -162,6 +167,11 @@ def current() -> AppSettings:
             multilingual=settings.multilingual,
             audio_preprocess=settings.audio_preprocess,
             auto_context=settings.auto_context,
+            diarization_fill_nearest=settings.diarization_fill_nearest,
+            speaker_change_min_words=settings.speaker_change_min_words,
+            speaker_change_min_s=settings.speaker_change_min_s,
+            semantic_search=settings.semantic_search,
+            embed_model=settings.embed_model,
             ollama_base_url=settings.ollama_base_url,
             ollama_model=settings.ollama_model,
             ollama_num_ctx=settings.ollama_num_ctx,
@@ -236,11 +246,13 @@ def _env_defaults() -> dict[str, Any]:
 
 INT_FIELDS = frozenset({
     "whisper_batch_size", "ollama_num_ctx", "ollama_timeout_s", "chunk_chars",
-    "max_upload_mb", "beam_size",
+    "max_upload_mb", "beam_size", "speaker_change_min_words",
 })
-FLOAT_FIELDS = frozenset({"no_speech_threshold", "vad_onset", "vad_offset"})
+FLOAT_FIELDS = frozenset({"no_speech_threshold", "vad_onset", "vad_offset",
+                          "speaker_change_min_s"})
 BOOL_FIELDS = frozenset({
     "delete_audio_after", "multilingual", "audio_preprocess", "auto_context",
+    "diarization_fill_nearest", "semantic_search",
 })
 
 

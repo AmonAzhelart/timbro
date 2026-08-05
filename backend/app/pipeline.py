@@ -180,6 +180,14 @@ def _process(job_id: str) -> None:
     options = store.get_options(job_id)
     skip_recon = bool(override and override.get("skip_recon"))
 
+    # Data della riunione: dai metadati dell'audio, con ripiego sulla data del
+    # file. Senza, «entro domattina» resta irrisolvibile. Non si sovrascrive
+    # una data già corretta a mano.
+    job_now = store.get_job(job_id)
+    if not (job_now and job_now.recorded_at):
+        detected = transcribe.probe_recorded_at(Path(audio_path))
+        store.update_job(job_id, recorded_at=detected or (job_now.created_at if job_now else ""))
+
     progress(JobStatus.TRANSCRIBING.value, 5, "Preparazione dell'audio")
     result = transcribe.transcribe(
         Path(audio_path), progress, options=options, skip_recon=skip_recon
@@ -205,6 +213,13 @@ def _process(job_id: str) -> None:
     # 3) Analisi LLM
     progress(JobStatus.SUMMARIZING.value, 75, "Analisi della trascrizione")
     analysis = summarize.analyze(segments, progress)
+    # Le scadenze dette a voce diventano date vere, ancorate
+    # all'istante della riunione. L'aritmetica sta in `dates`,
+    # non nel prompt: un modello che conta i giorni sbaglia.
+    _job = store.get_job(job_id)
+    analysis = summarize.resolve_due_dates(
+        analysis, (_job.recorded_at if _job else '') or (_job.created_at if _job else '')
+    )
 
     store.update_job(
         job_id,
@@ -214,6 +229,12 @@ def _process(job_id: str) -> None:
         analysis=analysis.model_dump(),
         error=None,
     )
+    # Indicizza per la ricerca d'archivio. Non solleva mai: una
+    # riunione elaborata bene non deve fallire per l'indice.
+    store.reindex_job(job_id)
+    # Gli impegni presi diventano task veri. Non tocca quelli
+    # esistenti: commenti e riprogrammazioni sono lavoro umano.
+    store.sync_tasks_from_job(job_id)
 
     if settings.delete_audio_after:
         Path(audio_path).unlink(missing_ok=True)
@@ -308,6 +329,13 @@ def rediarize(job_id: str) -> dict:
     analysis = summarize.analyze(
         [Segment(**s) for s in segments], progress, job.speaker_names
     )
+    # Le scadenze dette a voce diventano date vere, ancorate
+    # all'istante della riunione. L'aritmetica sta in `dates`,
+    # non nel prompt: un modello che conta i giorni sbaglia.
+    _job = store.get_job(job_id)
+    analysis = summarize.resolve_due_dates(
+        analysis, (_job.recorded_at if _job else '') or (_job.created_at if _job else '')
+    )
     store.update_job(
         job_id,
         status=JobStatus.DONE.value,
@@ -316,6 +344,12 @@ def rediarize(job_id: str) -> dict:
         analysis=analysis.model_dump(),
         error=None,
     )
+    # Indicizza per la ricerca d'archivio. Non solleva mai: una
+    # riunione elaborata bene non deve fallire per l'indice.
+    store.reindex_job(job_id)
+    # Gli impegni presi diventano task veri. Non tocca quelli
+    # esistenti: commenti e riprogrammazioni sono lavoro umano.
+    store.sync_tasks_from_job(job_id)
     return diarization
 
 
@@ -331,6 +365,13 @@ def regenerate_analysis(job_id: str) -> None:
 
     progress(JobStatus.SUMMARIZING.value, 75, "Rigenerazione del verbale")
     analysis = summarize.analyze(job.segments, progress, job.speaker_names)
+    # Le scadenze dette a voce diventano date vere, ancorate
+    # all'istante della riunione. L'aritmetica sta in `dates`,
+    # non nel prompt: un modello che conta i giorni sbaglia.
+    _job = store.get_job(job_id)
+    analysis = summarize.resolve_due_dates(
+        analysis, (_job.recorded_at if _job else '') or (_job.created_at if _job else '')
+    )
     store.update_job(
         job_id,
         status=JobStatus.DONE.value,
@@ -339,3 +380,9 @@ def regenerate_analysis(job_id: str) -> None:
         analysis=analysis.model_dump(),
         error=None,
     )
+    # Indicizza per la ricerca d'archivio. Non solleva mai: una
+    # riunione elaborata bene non deve fallire per l'indice.
+    store.reindex_job(job_id)
+    # Gli impegni presi diventano task veri. Non tocca quelli
+    # esistenti: commenti e riprogrammazioni sono lavoro umano.
+    store.sync_tasks_from_job(job_id)
